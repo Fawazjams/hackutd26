@@ -21,7 +21,7 @@ BASE_URL = "https://integrate.api.nvidia.com/v1"
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"   # backend/.env
 
 DEFAULT_MODELS = [
-    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
     "nvidia/nvidia-nemotron-nano-9b-v2",
     "nvidia/llama-3.1-nemotron-ultra-253b-v1",
 ]
