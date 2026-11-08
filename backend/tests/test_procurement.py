@@ -13,10 +13,10 @@ def test_deterministic_and_outcomes():
     assert a["simulated"] is True and a["llm_used"] is False
     assert a["need"]["gpu_hours"] == 336
     outs = {n["provider_id"]: n for n in a["negotiations"]}
-    assert outs["halden"]["outcome"] == "deal" and outs["halden"]["final_price"] <= P.BREAKEVEN
-    assert outs["corvid"]["outcome"] == "no_deal"
+    assert outs["nebius"]["outcome"] == "deal" and outs["nebius"]["final_price"] <= P.BREAKEVEN
+    assert outs["coreweave"]["outcome"] == "no_deal"
     prop = a["proposal"]
-    assert prop["provider_id"] == "halden" and prop["status"] == "pending"
+    assert prop["provider_id"] == "nebius" and prop["status"] == "pending"
     assert prop["total"] == round(prop["price_per_gpu_hr"] * prop["gpu_hours"], 2)
     assert prop["savings"] > 0
 

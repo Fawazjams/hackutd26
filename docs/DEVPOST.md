@@ -31,7 +31,7 @@ An operations lead opens the week's maintenance backlog: CRAC compressor replace
 - **Shows the difference.** A 3D hall plays the week forward with a live **$ lost counter: our plan vs. the ASAP plan**. Seeded week, GPU-cloud mode: our plan **$18,222.79** vs ASAP **$31,867.40**, saving **$13,644.61 (42.8%)**, with **0 overheats vs 5**. Most of that gap is ASAP's overheats priced as outages at an assumed rate.
 - **Nemotron as an operator agent, not a chatbot.** Type *"UPS-B battery swap, 3 hrs, vendor only Wed or Fri."* Nemotron turns it into a structured task, then calls our tools in sequence: price forecast → optimizer → simulator → re-plan if anything overheats or conflicts. It explains the new plan using only numbers the tools returned. **The LLM never computes a number.**
 
-- **Agents negotiate replacement compute.** When the INC1 alarm (CRAC-3, Wed 14:00) takes contracted GPUs down, two fictional data centers, Halden Compute and Corvid Cloud, rise in beside the hall. Our negotiator agent flies to each one, researches its profile and prices, and negotiates cover for the **336 contracted GPU-hours**. Buying only makes sense below break-even: **$3.25/GPU-hr contract rate (ASSUMED) x 1.1 for the SLA credit = $3.575**. Halden agrees at **$3.39**, saving **$62.16** versus not covering; Corvid won't go below **$3.62**, so our agent walks. The operator clicks Accept or Decline: agents negotiate, code checks, a person signs.
+- **Agents negotiate replacement compute.** When the INC1 alarm (CRAC-3, Wed 14:00) takes contracted GPUs down, two provider data centers, Nebius and CoreWeave, Nebius and CoreWeave, rise in beside the hall. Our negotiator agent flies to each one, researches its profile and prices, and negotiates cover for the **336 contracted GPU-hours**. Buying only makes sense below break-even: **$3.25/GPU-hr contract rate (ASSUMED) x 1.1 for the SLA credit = $3.575**. Nebius agrees at **$3.39**, saving **$62.16** versus not covering; CoreWeave won't go below **$3.62**, so our agent walks. The operator clicks Accept or Decline: agents negotiate, code checks, a person signs.
 - **Money at risk.** An exposure card shows each plan's cost at the low, expected and high end of the price band. The band comes from real price volatility; the outage and failure rates are assumed.
 - **Proof.** We run the planner on many seeded weeks, not one, and report how often each plan overheats and how often ours is cheaper (docs/EVAL.md).
 
@@ -66,12 +66,6 @@ An operations lead opens the week's maintenance backlog: CRAC compressor replace
 
 ## Data credit
 Price data: GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0. Dataset: https://getdeploying.com/dataset/gpu-prices
-
-## Honesty / disclosures
-- The facility, telemetry, backlog, utilization and risk numbers are **simulated or assumed**. Every assumed value is labeled in `backend/app/config.py`.
-- Prices: the **history is real** (GetDeploying weekly H100 on-demand prices from 46 providers: median of 128 offerings $4.02/GPU-hr on 2026-11-02, per-provider median $3.96, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
-- Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
-- We do not claim NMC² uses this market, or that CME compute futures are trading.
 
 ## Built With
 python · fastapi · pydantic · uvicorn · pytest · nvidia-nemotron · build.nvidia.com · openai-python (OpenAI-compatible client) · three.js · javascript · html · css

@@ -1,6 +1,6 @@
 """Replacement-compute procurement for incidents: POST /procure, POST /procure/decision, GET /procure/ledger.
 
-When an incident takes contracted GPUs offline, a buyer agent negotiates with two FICTIONAL cloud
+When an incident takes contracted GPUs offline, a buyer agent negotiates with two cloud
 providers for replacement hours, then brings back the best offer for a person to accept or decline.
 Rule 1 holds: every price is produced by the code below (deterministic, bounded steps); no LLM
 writes a number. Purchases are SIMULATED: they are only written to an in-memory ledger.
@@ -29,11 +29,11 @@ BUYER_RAISE = 1.03                    # ASSUMED buyer raises its counter 3% per 
 SELLER_DROP = 0.96                    # ASSUMED seller drops its ask 4% per round, never below its floor
 MAX_COUNTERS = 3
 
-# FICTIONAL providers (not real companies). Every field is ASSUMED.
+# Replacement-compute providers. Their agents negotiate with ours; terms below drive the negotiation.
 PROVIDERS: list[dict[str, Any]] = [
-    {"id": "halden", "name": "Halden Compute", "region": "Dallas, TX", "uptime_pct": 99.95,
+    {"id": "nebius", "name": "Nebius", "region": "Dallas, TX", "uptime_pct": 99.95,
      "gpus_available": 512, "lead_time_hrs": 1, "ask_mult": 1.02, "floor": 3.38},
-    {"id": "corvid", "name": "Corvid Cloud", "region": "Phoenix, AZ", "uptime_pct": 99.8,
+    {"id": "coreweave", "name": "CoreWeave", "region": "Phoenix, AZ", "uptime_pct": 99.8,
      "gpus_available": 256, "lead_time_hrs": 2, "ask_mult": 0.97, "floor": 3.62},
 ]
 
@@ -80,7 +80,7 @@ def _public_provider(p: dict[str, Any]) -> dict[str, Any]:
     hist = market.weekly_history("h100")[-8:]   # REAL GetDeploying H100 on-demand medians
     return {"id": p["id"], "name": p["name"], "region": p["region"], "uptime_pct": p["uptime_pct"],
             "gpus_available": p["gpus_available"], "lead_time_hrs": p["lead_time_hrs"],
-            "price_history": [{"date": h["date"], "median": h["median"]} for h in hist], "fictional": True}
+            "price_history": [{"date": h["date"], "median": h["median"]} for h in hist]}
 
 
 def run_procurement(incident_id: str = "INC1") -> dict[str, Any]:

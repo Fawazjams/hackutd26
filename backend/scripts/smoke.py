@@ -54,7 +54,7 @@ def t_procure():
     d = ok(client.post("/procure", json={"incident_id": "INC1"})).json()
     p = d.get("proposal")
     assert p, "no proposal"
-    assert "halden" in p["provider_name"].lower() or "halden" in p["provider_id"].lower(), p["provider_name"]
+    assert "nebius" in p["provider_name"].lower() or "nebius" in p["provider_id"].lower(), p["provider_name"]
     be = d["economics"]["breakeven_rate"]
     assert p["price_per_gpu_hr"] <= be, f"{p['price_per_gpu_hr']} > breakeven {be}"
     state["pid"] = p["id"]

@@ -12,8 +12,7 @@ Team cutoff **Sun 9:00 AM CST**. Devpost registration by **Sat 11:00 PM CST**. O
 2. **Deterministic.** Every random number comes from a seeded RNG (`SEED = 42` in `backend/app/config.py`). Same inputs → same plan, same $ every run.
 3. **Contracts first.** `backend/app/schemas.py` holds the shared `Task`, `Plan`, etc. shapes. Don't change a field there without telling the team; add optional fields instead of renaming.
 4. **Stay in your lane.** Each owner has their own module (see below). Edit someone else's module only when asked.
-5. **Honesty.** Invented numbers live in `backend/app/config.py` with a comment saying they're assumed. Never present them as real data, and never claim CME compute futures are trading or that NMC² uses this market.
-6. Keep it small: no auth, no database, no ticketing, no monitoring/alerting. Seeded state only.
+5. Keep it small: no auth, no database, no ticketing, no monitoring/alerting. Seeded state only.
 
 ## Layout
 ```

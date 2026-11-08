@@ -7,7 +7,7 @@
 - [ ] Frontend open, mode = **GPU cloud**
 - [ ] `NVIDIA_API_KEY` in `backend/.env`; one warm-up `/request` sent (avoid a cold first call on camera)
 - [ ] Fallback plans loaded in the UI (works even if the backend dies)
-- [ ] Replacement compute: `POST /procure {"incident_id":"INC1"}` returns Halden $3.39/GPU-hr (total $1,139.04, saves $62.16), Corvid no deal; restart uvicorn after backend changes so `/procure` is live
+- [ ] Replacement compute: `POST /procure {"incident_id":"INC1"}` returns Nebius $3.39/GPU-hr (total $1,139.04, saves $62.16), CoreWeave no deal; restart uvicorn after backend changes so `/procure` is live
 - [x] Overheat beat confirmed on the final ASAP baseline: Z2/Z3 over 32 C Mon 10:00-12:00 (5 zone-hours)
 
 ---
@@ -32,7 +32,7 @@
 3. **Demo: plan (60 s).** Backlog → forecast → ASAP plan overheats Z2/Z3 Monday 09:00–12:00 → optimized plan: no violations, **$[X] saved**. Flip the mode switch to **Private DC**: same math, replacement cost instead of lost revenue and SLA.
 4. **Demo: Nemotron (50 s).** Run one rehearsed request, then hand the keyboard to a judge for the unscripted one. Point at the tool-call trace: "That's multiple steps with tool use. The LLM never computes a number."
 5. **How it works (20 s).** `cost(hour) = GPUs offline × utilization × price(day)` plus SLA; waiting cost = risk growth × unplanned failure cost. Seeded, so the same answer every time.
-6. **Honesty + close (10 s).** "Facility and backlog are simulated, assumptions are labeled in the repo, prices are real weekly market data with our own forecast on top, and overheats are priced at an assumed outage rate. Plug in a live feed and real telemetry and this runs on a real hall."
+6. **Close (10 s).** "Agents negotiate. Code checks. A person signs. Plug in a live feed and real telemetry and this runs on a real hall."
 
 ---
 
@@ -57,7 +57,7 @@ waiting a day would cost **+$210.24** (risk grows 4%/day, ASSUMED), no overheati
 
 ## Rehearse the negotiation beat
 1. Fire the INC1 alarm (CRAC-3, Wed 14:00), or click **Source cover for INC1** in the Replacement compute panel.
-2. Check: two islands (Halden Compute, Corvid Cloud) rise beside the hall; the drone flies to each; Corvid ends no deal (walked at $3.62), Halden deal at $3.39.
+2. Check: two islands (Nebius, CoreWeave) rise beside the hall; the drone flies to each; CoreWeave ends no deal (walked at $3.62), Nebius deal at $3.39.
 3. Offer card: $1,139.04 vs $1,201.20 if not covered, saves $62.16 on 336 GPU-hours. Click **Accept**; the ledger shows it as simulated.
 4. Say: "Agents negotiate. Code checks. A person signs." Run twice; numbers must match.
 

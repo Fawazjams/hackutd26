@@ -332,7 +332,7 @@ export async function createDataCenter(containerEl) {
   }
 
   // ================================================================ PROVIDER ISLANDS + NEGOTIATOR DRONE
-  // Fictional replacement-compute providers that float in beside the hall during an incident.
+  // Replacement-compute providers that float in beside the hall during an incident.
   // All motion runs on wall-clock time so it animates while the week is paused.
   const providers = createProviders(scene);
 
@@ -1101,11 +1101,11 @@ function buildHall(parent, R, anim) {
 }
 
 // ================================================================== PROVIDERS (replacement compute)
-// Small floating islands for fictional providers + a negotiator drone that flies between them.
+// Small floating islands for provider data centers + a negotiator drone that flies between them.
 function createProviders(scene) {
   const root = new THREE.Group();
   scene.add(root);
-  const ROOF = { halden: 0x3f6fb0, corvid: 0x8463b4 };
+  const ROOF = { nebius: 0x3f6fb0, coreweave: 0x8463b4 };
   // perpendicular to the default camera direction (az = 45deg), so they sit left/right on screen
   const SLOTS = [new THREE.Vector3(-56, -3, 56), new THREE.Vector3(56, -3, -56), new THREE.Vector3(0, -6, -80)];
   const HOME = new THREE.Vector3(0, 14, 0);

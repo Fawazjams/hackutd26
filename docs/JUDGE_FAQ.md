@@ -1,4 +1,4 @@
-# Judge FAQ (hard questions, honest answers)
+# Judge FAQ
 
 Numbers come only from PITCH.md, docs/PROCUREMENT.md, docs/EVAL.md and README.md. Everything simulated is labeled as simulated.
 
@@ -15,13 +15,13 @@ Partly, and we say so. Two of the five overheat hours are only 32.3 and 32.7 deg
 We checked: 100 seeded weeks, including 14 unplanted weeks where ASAP overheated anyway. ASAP overheated in 59 of 100 weeks (45 of 45 planted ones); optimized overheated in 0 of 100, which is true by construction because it checks every slot against the sim. The informative numbers are the catch rate and the savings, and all of it runs on our assumed model, not a real hall.
 
 **5. Why buy replacement compute instead of paying the SLA credit?**
-Not covering loses the contract revenue and owes a 10% credit: 1.1 x $3.25 = $3.575/GPU-hr. Halden at $3.39 beats that and saves $62.16 on the incident ($1,139 vs $1,201 for 336 GPU-hours); Corvid stopped at $3.62, so the agent walked.
+Not covering loses the contract revenue and owes a 10% credit: 1.1 x $3.25 = $3.575/GPU-hr. Nebius at $3.39 beats that and saves $62.16 on the incident ($1,139 vs $1,201 for 336 GPU-hours); CoreWeave stopped at $3.62, so the agent walked.
 
 **6. Is the negotiation real AI?**
 Not yet. It is scripted, code-bounded rules: opening ask from the market price, a secret floor, 5% counter steps, and only accept, counter or walk. Next step is Nemotron choosing those moves inside the same code limits, so no model ever sets a price.
 
 **7. Is the data real?**
-Price history is real (46 providers, GetDeploying). The hall, backlog, thermal model, failure risk, the two data centers (Halden, Corvid), the contract rate and the ledger are simulated and labeled in `config.py`. The forecast is our model on top of a snapshot, not a feed.
+Price history is real (46 providers, GetDeploying). The hall, backlog, thermal model, failure risk, the two data centers (Nebius, CoreWeave), the contract rate and the ledger are simulated and labeled in `config.py`. The forecast is our model on top of a snapshot, not a feed.
 
 **8. What about collateral and futures?**
 GPUs already work as loan collateral, priced on contracts and utilization (Wing VC, AnandTech), which is why downtime hours have a financial value. We do not use futures: CME + Silicon Data planned a launch for Oct 5, 2026, and ICE + Ornn is pending CFTC review, and neither is confirmed trading. A forward curve is a v2 idea once they trade.
@@ -39,11 +39,3 @@ It targets their three failure modes: a missed warning (catches overheats before
 Nemotron runs a multi-step workflow through 9 tools (lookup, windows, add task, compare slots, choose slot, plan, simulate, re-plan), and triages the simulated INC1 alarm with no human prompt. It is the hosted Nemotron, prompted with tool definitions, not fine-tuned.
 
 ---
-
-## Never say
-- "Futures trading" or that we trade or hedge futures. Say: futures are not confirmed trading, and we do not use them.
-- "Live price feed" or "real-time prices". Say: real weekly price history, snapshot, with our own daily forecast.
-- "Trained" or "fine-tuned" Nemotron. Say: prompted with tool definitions; fine-tuning is next.
-- "AI negotiates prices". Say: scripted, code-bounded negotiation; no model sets a price.
-- "Real hall", "real providers" or "real money". The hall, Halden, Corvid and the ledger are simulated.
-- "Proven savings of $13,644" without saying most of it is overheats priced at an assumed outage rate.

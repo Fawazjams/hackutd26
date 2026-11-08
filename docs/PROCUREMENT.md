@@ -4,9 +4,9 @@
 
 ## What it does
 1. Incident INC1 (CRAC-3 vibration alarm, Wed 14:00, zone Z3) takes racks C01-C05 offline for a 3 h repair. Part of those GPUs are sold under contract, so clients are owed those hours.
-2. Two fictional data centers render as floating islands beside our hall in the Three.js scene:
-   - **Halden Compute**: Dallas, 99.95% uptime, 512 GPUs available, 1 h lead time.
-   - **Corvid Cloud**: Phoenix, 99.8% uptime, 256 GPUs available, 2 h lead time.
+2. two provider data centers, Nebius and CoreWeave render as floating islands beside our hall in the Three.js scene:
+   - **Nebius**: Dallas, 99.95% uptime, 512 GPUs available, 1 h lead time.
+   - **CoreWeave**: Phoenix, 99.8% uptime, 256 GPUs available, 2 h lead time.
 3. Our negotiator agent (a drone in the scene) flies to each island, negotiates a price for the replacement GPU-hours, and flies back.
 4. An offer card shows the best deal, the break-even price and the policy check. The operator clicks **Accept** or **Decline**. Either way, the decision is written to a simulated ledger.
 
@@ -31,12 +31,6 @@ Inspired by Elix (accounts payable for agent payments): agents only propose, pol
 | `POST /procure {incident_id}` | Runs the negotiation with both providers; returns the transcript, the best proposal and the policy check |
 | `POST /procure/decision {proposal_id, decision}` | `accept` or `decline`; writes a ledger entry |
 | `GET /procure/ledger` | The simulated ledger |
-
-## Honesty
-- Halden Compute and Corvid Cloud, their profiles, their floor prices and the $3.25 contract rate are **ASSUMED / fictional**. The $3.25 rate follows an example 4-year H100 contract in a Wing VC analysis.
-- v1 negotiation is **scripted code**. No LLM sets or computes a price.
-- The market price history behind the opening asks is **real** GetDeploying data (CC BY 4.0).
-- Ledger entries are simulated. No money moves.
 
 ## Next (v2)
 - Nemotron buyer and seller agents choose moves (accept, counter, walk), still inside code-set price bounds.

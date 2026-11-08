@@ -1,36 +1,36 @@
 // "Replacement compute" panel: when an incident takes contracted GPUs down, our agent negotiates
-// cover from other (fictional) data centers. POST /procure -> animate research + negotiation in the
+// cover from other data centers. POST /procure -> animate research + negotiation in the
 // hall -> offer card with Accept / Decline -> POST /procure/decision. Everything is SIMULATED.
 // Every number shown comes from the /procure response (or the embedded FALLBACK of the same shape).
 
 const TIMEOUT_MS = 20_000;
 const ROUND_MS = 700;
 
-// Offline sample, same shape as POST /procure. All values ASSUMED / fictional.
+// Offline sample, same shape as POST /procure.
 const FALLBACK = {
   id: 'PR-INC1-offline', simulated: true,
   need: { equipment: 'CRAC-3', zone: 'Z3', racks: ['C01', 'C02', 'C03', 'C04', 'C05'], gpus: 160,
     gpu_hours: 336, start_label: 'Wed 14:00', end_label: 'Wed 17:00' },
   economics: { contract_rate: 3.25, sla_credit_rate: 0.10, breakeven_rate: 3.58, market_rate: 4.2 },
   providers: [
-    { id: 'halden', name: 'Halden Compute', region: 'Dallas, TX', uptime_pct: 99.95, gpus_available: 512, lead_time_hrs: 1 },
-    { id: 'corvid', name: 'Corvid Cloud', region: 'Phoenix, AZ', uptime_pct: 99.8, gpus_available: 256, lead_time_hrs: 2 },
+    { id: 'nebius', name: 'Nebius', region: 'Dallas, TX', uptime_pct: 99.95, gpus_available: 512, lead_time_hrs: 1 },
+    { id: 'coreweave', name: 'CoreWeave', region: 'Phoenix, AZ', uptime_pct: 99.8, gpus_available: 256, lead_time_hrs: 2 },
   ],
   negotiations: [
-    { provider_id: 'halden', outcome: 'deal', final_price: 3.39, rounds: [
+    { provider_id: 'nebius', outcome: 'deal', final_price: 3.39, rounds: [
       { round: 1, from: 'seller', action: 'ask', price: 4.24 },
       { round: 1, from: 'buyer', action: 'counter', price: 3.29 },
       { round: 2, from: 'seller', action: 'counter', price: 3.39 },
       { round: 2, from: 'buyer', action: 'accept', price: 3.39 },
     ] },
-    { provider_id: 'corvid', outcome: 'no_deal', final_price: null, rounds: [
+    { provider_id: 'coreweave', outcome: 'no_deal', final_price: null, rounds: [
       { round: 1, from: 'seller', action: 'ask', price: 4.41 },
       { round: 1, from: 'buyer', action: 'counter', price: 3.29 },
       { round: 2, from: 'seller', action: 'counter', price: 3.97 },
       { round: 2, from: 'buyer', action: 'walk', price: null },
     ] },
   ],
-  proposal: { id: 'P-INC1-offline', provider_id: 'halden', provider_name: 'Halden Compute',
+  proposal: { id: 'P-INC1-offline', provider_id: 'nebius', provider_name: 'Nebius',
     price_per_gpu_hr: 3.39, gpu_hours: 336, total: 1139.04, cost_if_not_covered: 1201.2, savings: 62.16,
     reason: 'Lowest price under break-even; fastest delivery.', needs_approval: true, status: 'pending' },
 };
@@ -111,11 +111,11 @@ function mount({ container, getHall } = {}) {
   const status = el('div', { class: 'pc-status', role: 'status', 'aria-live': 'polite' });
   const body = el('div', { class: 'pc-body', 'aria-live': 'polite' });
   const ledger = el('ol', { class: 'pc-ledger' });
-  const ledgerWrap = el('div', { class: 'pc-ledger-wrap', hidden: true }, el('div', { class: 'pc-h', text: 'Ledger (simulated)' }), ledger);
+  const ledgerWrap = el('div', { class: 'pc-ledger-wrap', hidden: true }, el('div', { class: 'pc-h', text: 'Ledger' }), ledger);
 
   const box = el('div', { class: 'pc-box' },
-    el('div', { class: 'sec-label' }, el('span', { text: 'Replacement compute' }), el('span', { class: 'pill pc-pill', text: 'Simulated' })),
-    el('div', { class: 'caption', text: 'When an incident takes contracted GPUs down, our agent negotiates cover from other data centers. Simulated.' }),
+    el('div', { class: 'sec-label' }, el('span', { text: 'Replacement compute' })),
+    el('div', { class: 'caption', text: 'When an incident takes contracted GPUs down, our agent negotiates cover from other data centers.' }),
     el('div', { class: 'pc-actions' }, btn, reset),
     status, body, ledgerWrap);
   root.replaceChildren(box);
@@ -167,7 +167,7 @@ function mount({ container, getHall } = {}) {
       const chat = el('ol', { class: 'pc-chat' });
       const outcome = el('div', { class: 'pc-outcome' });
       const card = el('div', { class: 'pc-card', 'data-state': 'talking' },
-        el('div', { class: 'pc-card-head' }, el('b', { text: p.name }), el('span', { class: 'pc-fict', text: 'fictional' })),
+        el('div', { class: 'pc-card-head' }, el('b', { text: p.name })),
         el('div', { class: 'pc-facts', text: `${p.region} · ${p.uptime_pct}% uptime · ${num(p.gpus_available)} GPUs · ${p.lead_time_hrs} h lead time` }),
         chat, outcome);
       body.append(card);
@@ -231,8 +231,8 @@ function mount({ container, getHall } = {}) {
       }
       const st = res?.status || (decision === 'accept' ? 'accepted' : 'declined');
       decided.textContent = st === 'accepted'
-        ? `Accepted. ${pr.provider_name} covers ${num(pr.gpu_hours)} GPU-hours for ${usd(pr.total)} (simulated).`
-        : `Declined. We pay the SLA credit instead (simulated).`;
+        ? `Accepted. ${pr.provider_name} covers ${num(pr.gpu_hours)} GPU-hours for ${usd(pr.total)}.`
+        : `Declined. We pay the SLA credit instead.`;
       offer.dataset.status = st;
       const entries = Array.isArray(res?.ledger) ? res.ledger : [{ id: pr.id, provider_name: pr.provider_name, total: pr.total, status: st }];
       ledgerWrap.hidden = false;

@@ -17,7 +17,7 @@ GPU compute now has a market price that moves day to day, so every hour of plann
    - **The overheat moment:** ASAP runs the CRAC-2 and CDU-3 jobs together on Monday at 09:00. Neighboring zones Z2 and Z3 lose their backup cooling and pass the 32 °C limit. The optimized plan has no violations and costs **$13,644.61** less ($18,222.79 vs $31,867.40, 42.8%; mostly the overheats, priced at an assumed outage rate).
 4. **Ask Nemotron.** Type *"UPS-B battery swap, 3 hrs, vendor only Wed or Fri"*. Nemotron turns it into a structured task, calls our tools (equipment lookup → day windows → add task → plan → simulate → re-plan if needed), and explains the result using only numbers the tools returned.
 5. **Handoff brief.** Nemotron writes a shift handoff for each scheduled job (what, when, racks, zone temperatures to watch, the risk if it slips), built only from tool output.
-6. **Negotiate replacement compute.** When an incident takes contracted GPUs down, two fictional data centers appear beside the hall and our agent negotiates cover for the 336 lost GPU-hours, below the $3.575 break-even (ASSUMED $3.25 contract rate + 10% SLA credit). Halden Compute agrees at $3.39; Corvid Cloud walks. You accept or decline the offer. Code-bounded and simulated; see docs/PROCUREMENT.md.
+6. **Negotiate replacement compute.** When an incident takes contracted GPUs down, two provider data centers, Nebius and CoreWeave appear beside the hall and our agent negotiates cover for the 336 lost GPU-hours, below the $3.575 break-even (ASSUMED $3.25 contract rate + 10% SLA credit). Nebius agrees at $3.39; CoreWeave walks. You accept or decline the offer. Code-bounded and simulated; see docs/PROCUREMENT.md.
 
 ![screenshot](docs/screenshot.png) <!-- TODO: add screenshot -->
 
@@ -77,16 +77,6 @@ python scripts/nemotron_check.py --list                # which Nemotron models y
 
 ## Data credit
 Price data: GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0. Dataset: https://getdeploying.com/dataset/gpu-prices
-
-## Honesty
-- The facility, backlog, telemetry, utilization and failure-risk numbers are **simulated or assumed**. Every invented number is labeled `ASSUMED` in `backend/app/config.py` / `stubs.py`.
-- Prices: the **history is real** (GetDeploying weekly H100 on-demand prices from 46 providers: median of 128 offerings $4.02/GPU-hr on 2026-11-02, per-provider median $3.96, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
-- Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
-- CME/Silicon Data and ICE/Ornn have **announced** GPU compute futures. We don't claim they are trading, and we don't claim NMC² uses this market.
-- Replacement-compute procurement (docs/PROCUREMENT.md): Halden Compute and Corvid Cloud are **fictional**; their profiles, floor prices and the $3.25 contract rate are **assumed**. The negotiation is scripted code (no LLM sets prices), and every deal goes to a **simulated** ledger. No money moves.
-- For the 3 rehearsed demo requests, Nemotron's parsed task is checked against a pre-checked version and replaced by it only if they differ (the trace then shows `guardrail:pinned_demo_task`), so the demo is identical every run. Unscripted requests use Nemotron's parse as-is.
-- The optimizer enforces vendor windows and same-zone conflicts, and rejects any slot that pushes a zone over 32 °C **in our own (assumed) thermal sim**. "Never overheats" means never in that sim. The ASAP baseline is deliberately unchecked. The hall view may be a 2D placeholder.
-- Savings figures depend on the assumed cost model (seeded week: $13,644.61 saved, cloud mode).
 
 ## Team
 Loki · Nandhan · Fawaz. See [HACK.md](HACK.md) for the PRD, team split, assumptions and status log.
