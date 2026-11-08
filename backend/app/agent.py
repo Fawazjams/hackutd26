@@ -15,13 +15,14 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from dotenv import load_dotenv
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 
 from .config import COOLING_ZONES, HOURS, OVERHEAT_C, ZONE_NEIGHBORS, ZONE_RACKS
 from .demo_requests import match_demo
-from .schemas import AgentRequest, AgentResponse, Mode, Plan, PlanRequest, Task, Violation, Window
+from .schemas import (AgentRequest, AgentResponse, Mode, Plan, PlanRequest, Task, Violation, Window,
+                      hour_label)
 
 router = APIRouter(tags=["agent"])
 
@@ -29,7 +30,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")  # backend/.env, gitig
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"  # only model that chained 3 tools in scripts/nemotron_check.py
-MAX_STEPS = 8
+MAX_STEPS = 12  # lookup, day_windows, add_task, compare, choose, plan, simulate, avoid, + a nudge
 MAX_AVOID_TRIES = 6
 STREAM_IDLE_TIMEOUT_S = 180  # /request/stream gives up if no event arrives for this long
 THERMAL_TAIL_HRS = 3  # violations this many hours after a job ends still count as caused by it (thermal inertia)
@@ -109,16 +110,34 @@ class AgentState:
     tool_calls: list[str] = field(default_factory=list)
     llm_used: bool = False
     excluded: dict[str, list[list[int]]] = field(default_factory=dict)  # task id -> week-hour ranges removed by avoid_violations
-    requested: dict[str, Task] = field(default_factory=dict)  # task as the operator asked for it (before avoid_violations)
+    requested: dict[str, Task] = field(default_factory=dict)  # task as the operator asked for it (before avoid_violations/choose_slot)
     on_event: Callable[[dict[str, Any]], None] | None = field(default=None, repr=False)  # /request/stream
+    options: dict[str, dict[str, Any]] = field(default_factory=dict)  # task id -> last compare_slots result
+    choice: dict[str, dict[str, Any]] = field(default_factory=dict)   # task id -> choose_slot result (+ "by")
+    base: list[Task] | None = None        # week the new task joins (None = seeded BACKLOG); incidents: frozen week
+    asap_base: list[Task] | None = None   # same for the ASAP baseline (None = base)
+    mode: str = "cloud"
+    id_prefix: str = "R"                  # new task ids: R1.. for requests, I1.. for incidents
+    incident: dict[str, Any] | None = None
 
     def as_requested(self, t: Task) -> Task:
         return self.requested.get(t.id, t)
 
+    def fresh(self, **kw: Any) -> "AgentState":
+        """New empty run with the same setup (week, mode, listener) and trace so far."""
+        return AgentState(text=self.text, tool_calls=self.tool_calls, on_event=self.on_event, base=self.base,
+                          asap_base=self.asap_base, mode=self.mode, id_prefix=self.id_prefix,
+                          incident=self.incident, **kw)
+
 
 def _validate_task(args: dict[str, Any], state: AgentState) -> Task | str:
     args = dict(args)
-    args.setdefault("id", f"R{len(state.tasks) + 1}")
+    if "id" not in args:
+        taken = {t.id for t in _base_tasks(state)} | {t.id for t in state.tasks}
+        n = len(state.tasks) + 1
+        while f"{state.id_prefix}{n}" in taken:
+            n += 1
+        args["id"] = f"{state.id_prefix}{n}"
     args.setdefault("risk_growth_per_day", DEFAULT_RISK_GROWTH)
     if not args.get("allowed_windows"):
         args.pop("allowed_windows", None)  # none given = any time (models.Task default: whole week)
@@ -137,23 +156,39 @@ def _validate_task(args: dict[str, Any], state: AgentState) -> Task | str:
     return t
 
 
-def _plan(state: AgentState, strategy: str, mode: str = "cloud") -> Plan:
-    from . import planner  # lazy: Nandhan's optimizer
+def _base_tasks(state: AgentState, strategy: str = "optimized") -> list[Task]:
     from .backlog import BACKLOG
+    if strategy == "asap" and state.asap_base is not None:
+        return state.asap_base
+    return state.base if state.base is not None else BACKLOG
+
+
+def _week_tasks(state: AgentState, strategy: str = "optimized", override: Task | None = None) -> list[Task]:
+    """Base week (minus ids the agent re-added) + the agent's tasks; `override` replaces one of them."""
     known = {t.id for t in state.tasks}
-    # ASAP baseline uses the tasks as requested; only the optimized plan sees avoid_violations narrowing.
+    # ASAP baseline uses the tasks as requested; only the optimized plan sees avoid_violations/choose_slot narrowing.
     new = [state.as_requested(t) for t in state.tasks] if strategy == "asap" else list(state.tasks)
-    tasks = [t for t in BACKLOG if t.id not in known] + new
-    plan = planner.make_plan(PlanRequest(mode=mode, strategy=strategy, tasks=tasks))
+    if override is not None:
+        new = [override if t.id == override.id else t for t in new]
+    return [t for t in _base_tasks(state, strategy) if t.id not in known] + new
+
+
+def _lookup(state: AgentState) -> dict[str, Task]:
+    return {t.id: t for t in _week_tasks(state)}
+
+
+def _plan(state: AgentState, strategy: str, mode: str | None = None) -> Plan:
+    from . import planner  # lazy: Nandhan's optimizer
+    tasks = _week_tasks(state, strategy)
+    plan = planner.make_plan(PlanRequest(mode=mode or state.mode, strategy=strategy, tasks=tasks))
     state.plans[strategy] = plan
     return plan
 
 
 def _simulate(state: AgentState) -> list[Violation]:
     from . import simulate
-    from .backlog import task_lookup
     plan = state.plans.get("optimized") or _plan(state, "optimized")
-    state.violations = simulate.simulate_plan(plan, task_lookup(state.tasks)).violations
+    state.violations = simulate.simulate_plan(plan, _lookup(state)).violations
     return state.violations
 
 
@@ -190,18 +225,17 @@ def _subtract_hours(windows: list[Window], bad: set[int], duration: int) -> list
     return keep
 
 
-def _avoid_violations(state: AgentState, mode: str = "cloud") -> dict[str, Any]:
+def _avoid_violations(state: AgentState, mode: str | None = None) -> dict[str, Any]:
     """Code-side re-plan: for each NEW task implicated in a violation (same or neighbor zone, during or
     just after its slot), remove the offending hours from its allowed windows, re-plan, re-simulate.
     Backlog tasks are never edited. Deterministic; the LLM only decides to call this."""
-    from .backlog import task_lookup
     from .simulate import is_cooling_task
     plan, vs = _plan(state, "optimized", mode), _simulate(state)
     tries, stuck = 0, []
     while vs and tries < MAX_AVOID_TRIES:
         tries += 1
         by_item = {i.task_id: i for i in plan.items}
-        lookup = task_lookup(state.tasks)
+        lookup = _lookup(state)
         new_tasks, changed = [], False
         for t in state.tasks:
             it = by_item.get(t.id)
@@ -247,6 +281,111 @@ def _plan_summary(plan: Plan) -> dict[str, Any]:
             "unscheduled": [u.model_dump() for u in plan.unscheduled]}
 
 
+# ---------------------------------------------------------------- trade-offs: compare_slots / choose_slot
+
+
+def _find_task(state: AgentState, task_id: str | None) -> Task | None:
+    if not state.tasks:
+        return None
+    if not task_id:
+        return state.tasks[-1]
+    return next((t for t in state.tasks if t.id == task_id), None)
+
+
+def _no_task(state: AgentState, task_id: str | None) -> dict[str, Any]:
+    known = [t.id for t in state.tasks]
+    return {"error": f"no task '{task_id}'; " + (f"added task ids: {known}" if known else "call add_task first")}
+
+
+def _eval_slot(state: AgentState, task: Task, start: int) -> dict[str, Any]:
+    """Plan + simulate the week with `task` pinned to [start, start+duration). All numbers from code."""
+    from . import planner, simulate
+    from .prices import slot_cost
+    end = start + task.duration_hrs
+    pinned = task.model_copy(update={"allowed_windows": [Window(start_hour=start, end_hour=end)]})
+    tasks = _week_tasks(state, "optimized", pinned)
+    plan = planner.make_plan(tasks, state.mode, "optimized")
+    vs = simulate.simulate_plan(plan, {t.id: t for t in tasks}).violations
+    placed = next((i for i in plan.items if i.task_id == task.id), None)
+    return {"start_hour": start, "end_hour": end, "start": hour_label(start), "end": hour_label(end),
+            "task_cost": round(slot_cost(task, start, state.mode).total, 2),
+            "week_total": round(plan.total_cost, 2), "violations": len(vs),
+            "safe": not vs and placed is not None and placed.start_hour == start,
+            "_kinds": sorted({v.kind for v in vs}), "_placed": placed is not None and placed.start_hour == start}
+
+
+def _public(opt: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in opt.items() if not k.startswith("_")}
+
+
+def compare_slots(state: AgentState, task_id: str | None = None) -> dict[str, Any]:
+    """Price a few candidate slots for one new task: cheapest safe (what the optimizer picks), earliest
+    allowed, ASAP in business hours, and cheapest safe + 1 day. Each is a full week plan + sim."""
+    from . import planner
+    t = _find_task(state, task_id)
+    if t is None:
+        return _no_task(state, task_id)
+    req = state.as_requested(t)  # the operator's windows, not an earlier choose_slot pin
+    starts = planner.feasible_starts(req)
+    if not starts:
+        return {"error": f"{t.id} has no allowed window long enough for {t.duration_hrs} h"}
+    free = planner.make_plan(_week_tasks(state, "optimized", req), state.mode, "optimized")
+    cheapest = next((i.start_hour for i in free.items if i.task_id == t.id), None)
+    candidates = [("cheapest safe", cheapest), ("earliest allowed", starts[0]),
+                  ("ASAP (business hours)", next((s for s in starts if planner.is_business_hour_start(s)), None)),
+                  ("wait 1 day", cheapest + 24 if cheapest is not None and cheapest + 24 in starts else None)]
+    options, seen = [], set()
+    for label, s in candidates:
+        if s is None or s in seen:
+            continue
+        seen.add(s)
+        options.append({"label": label, **_eval_slot(state, req, s)})
+    safe_cheapest = next((o["start_hour"] for o in options if o["label"] == "cheapest safe" and o["safe"]), None)
+    result = {"task_id": t.id, "options": [_public(o) for o in options], "cheapest_safe_start_hour": safe_cheapest}
+    state.options[t.id] = {**result, "_raw": options}
+    return result
+
+
+def choose_slot(state: AgentState, task_id: str | None, start_hour: Any, reason: str = "",
+                by: str = "nemotron") -> dict[str, Any]:
+    """Pin the task to a slot the code has verified safe. Unsafe or out-of-window picks are refused."""
+    from . import planner
+    t = _find_task(state, task_id)
+    if t is None:
+        return _no_task(state, task_id)
+    try:
+        s = int(start_hour)
+    except (TypeError, ValueError):
+        return {"error": "start_hour must be an integer week hour (copy one from compare_slots)"}
+    req = state.as_requested(t)
+    if s not in planner.feasible_starts(req):
+        return {"error": f"start_hour {s} is outside {t.id}'s allowed windows "
+                         f"({', '.join(f'{w.start_hour}-{w.end_hour}' for w in req.allowed_windows)}, "
+                         f"{t.duration_hrs} h); pick a start_hour from compare_slots"}
+    if t.id not in state.options:
+        compare_slots(state, t.id)  # need the cheapest safe option for vs_cheapest
+    raw = state.options[t.id]["_raw"]
+    opt = next((o for o in raw if o["start_hour"] == s), None) or _eval_slot(state, req, s)
+    if not opt["safe"]:
+        why = (f"{opt['violations']} violation(s) in the week plan ({', '.join(opt['_kinds'])})" if opt["violations"]
+               else "the planner can't place it there without a cooling-zone conflict or overheating")
+        return {"error": f"{hour_label(s)} (start_hour {s}) is not safe: {why}. Pick a safe option "
+                         f"from compare_slots (cheapest safe start_hour: {state.options[t.id]['cheapest_safe_start_hour']})."}
+    cheapest = next((o for o in raw if o["start_hour"] == state.options[t.id]["cheapest_safe_start_hour"]), None)
+    state.requested.setdefault(t.id, t)
+    pinned = req.model_copy(update={"allowed_windows": [Window(start_hour=s, end_hour=opt["end_hour"])]})
+    state.tasks = [pinned if x.id == t.id else x for x in state.tasks]
+    state.plans.pop("optimized", None)  # the old plan no longer matches the task
+    state.violations = None
+    out = {"ok": True, "task_id": t.id, "start_hour": s, "end_hour": opt["end_hour"], "start": opt["start"],
+           "end": opt["end"], "task_cost": opt["task_cost"], "week_total": opt["week_total"],
+           "vs_cheapest": round(opt["week_total"] - cheapest["week_total"], 2) if cheapest else 0.0,
+           "reason": str(reason or "")}
+    state.choice[t.id] = {**out, "by": by, "compared": len(raw),
+                          "cheapest": cheapest["start"] if cheapest else None}
+    return out
+
+
 # ---------------------------------------------------------------- live events (/request/stream)
 
 
@@ -275,8 +414,7 @@ def run_tool(state: AgentState, name: str, args: dict[str, Any]) -> Any:
     """Execute one tool deterministically. Errors come back as {"error": ...} for the LLM to fix."""
     try:
         if name == "get_backlog":
-            from .backlog import BACKLOG
-            return [t.model_dump() for t in BACKLOG]
+            return [t.model_dump() for t in _base_tasks(state)]
         if name == "get_prices":
             from . import stubs  # same seeded curve GET /prices serves
             return stubs.prices(int(args.get("days", 7)))
@@ -290,13 +428,17 @@ def run_tool(state: AgentState, name: str, args: dict[str, Any]) -> Any:
             if isinstance(t, str):
                 return {"error": t}
             state.tasks = [x for x in state.tasks if x.id != t.id] + [t]
-            state.requested.pop(t.id, None)
-            state.excluded.pop(t.id, None)
+            for d in (state.requested, state.excluded, state.options, state.choice):
+                d.pop(t.id, None)
             return {"ok": True, "task": t.model_dump()}
+        if name == "compare_slots":
+            return compare_slots(state, args.get("task_id"))
+        if name == "choose_slot":
+            return choose_slot(state, args.get("task_id"), args.get("start_hour"), args.get("reason", ""))
         if name == "make_plan":
             if args.get("avoid_violations"):
-                return _avoid_violations(state, args.get("mode", "cloud"))
-            return _plan_summary(_plan(state, args.get("strategy", "optimized"), args.get("mode", "cloud")))
+                return _avoid_violations(state, args.get("mode"))
+            return _plan_summary(_plan(state, args.get("strategy", "optimized"), args.get("mode")))
         if name == "simulate":
             vs = _simulate(state)
             return {"violations": len(vs), "first": [v.model_dump() for v in vs[:5]]}
@@ -330,6 +472,16 @@ TOOLS = [
         "allowed_windows": {"type": "array", "items": {"type": "object", "properties": {
             "start_hour": {"type": "integer"}, "end_hour": {"type": "integer"}}}}},
         ["name", "equipment", "duration_hrs", "racks_affected", "zone"]),
+    _fn("compare_slots", "Price the candidate slots for an added task: cheapest safe, earliest allowed, ASAP "
+        "(business hours), wait 1 day. Each option is a full week plan + hall simulation and shows its "
+        "start_hour, task_cost, week_total and whether it is safe. Call after add_task.",
+        {"task_id": {"type": "string", "description": "id add_task returned, e.g. 'R1'"}}, ["task_id"]),
+    _fn("choose_slot", "Decide when the task runs: pick one SAFE option from compare_slots by its start_hour. "
+        "Unsafe or out-of-window picks are refused with the reason, so pick again.",
+        {"task_id": {"type": "string"},
+         "start_hour": {"type": "integer", "description": "copy start_hour from a compare_slots option"},
+         "reason": {"type": "string", "description": "one short sentence: why this option"}},
+        ["task_id", "start_hour", "reason"]),
     _fn("make_plan", "Schedule the backlog plus added tasks. strategy 'optimized' or 'asap'. Set "
         "avoid_violations=true after simulate reported violations: the new task is moved away from the "
         "hours that overheat or conflict, then re-planned and re-simulated.", {
@@ -342,14 +494,34 @@ TOOLS = [
 
 SYSTEM_PROMPT = """/no_think
 You are the maintenance-planning agent for a GPU data center hall. Turn the operator's request into
-ONE new maintenance task and get it scheduled. Workflow:
+ONE new maintenance task and get it scheduled. Workflow (call the tools; do not stop early):
 1. lookup_equipment(name) to get zone and racks.
 2. day_windows(days, start_hour_of_day, end_hour_of_day) if the request limits days/times.
 3. add_task with the zone, racks and windows exactly as the tools returned them.
-4. make_plan(strategy="optimized"), then simulate.
-5. If simulate reports violations, call make_plan with avoid_violations=true, then simulate again.
+4. compare_slots(task_id) to price the options.
+5. choose_slot(task_id, start_hour, reason): you decide. Pick the cheapest safe option unless the
+   operator asked for something else (e.g. "as soon as possible" -> earliest safe). Only safe options.
+6. make_plan(strategy="optimized"), then simulate.
+7. If simulate reports violations, call make_plan with avoid_violations=true, then simulate again.
 Never invent or compute numbers (hours, racks, costs); only copy numbers that tools returned or the
 operator wrote. When done, reply with one short sentence."""
+
+INCIDENT_SYSTEM_PROMPT = """/no_think
+You are the autonomous maintenance agent for a GPU data center hall. An equipment ALARM fired and no
+human operator is on the console: you triage it and schedule the repair yourself. Workflow (call the
+tools; do not stop early):
+1. lookup_equipment(name) for the alarmed equipment to get zone and racks.
+2. add_task for the repair: name it, copy equipment, duration_hrs, risk_growth_per_day and the allowed
+   window (start_hour, end_hour) exactly as the ALARM states, with zone and racks from lookup_equipment.
+3. compare_slots(task_id) to price fixing now vs later.
+4. choose_slot(task_id, start_hour, reason): you decide. Pick the cheapest safe option; never an unsafe one.
+5. make_plan(strategy="optimized"), then simulate.
+6. If simulate reports violations, call make_plan with avoid_violations=true, then simulate again.
+Never invent or compute numbers (hours, racks, costs); only copy numbers that tools returned or the
+ALARM states. When done, reply with one short sentence."""
+
+NUDGE_TEXT = ("You stopped before adding the task. Continue the workflow now: call day_windows if the "
+              "request limits days/times, then add_task, compare_slots, choose_slot, make_plan, simulate.")
 
 EXPLAIN_PROMPT = """/no_think
 Rewrite the FACTS for a data-center operations lead in 2-4 plain sentences. Use ONLY numbers that
@@ -404,9 +576,10 @@ def get_llm() -> LLM | None:
 # ---------------------------------------------------------------- loop, guardrails, explanation
 
 
-def _run_llm_loop(state: AgentState, llm: LLM) -> None:
-    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT},
+def _run_llm_loop(state: AgentState, llm: LLM, system_prompt: str = SYSTEM_PROMPT) -> None:
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt},
                                       {"role": "user", "content": state.text}]
+    nudged = False
     for step in range(1, MAX_STEPS + 1):
         emit(state, {"type": "thinking", "by": "nemotron", "step": step})
         msg = llm.chat(messages, TOOLS)
@@ -414,7 +587,13 @@ def _run_llm_loop(state: AgentState, llm: LLM) -> None:
         messages.append({"role": "assistant", "content": msg.get("content") or "",
                          **({"tool_calls": calls} if calls else {})})
         if not calls:
-            return
+            if state.tasks or nudged:
+                return
+            # Live: Nemotron sometimes stops right after lookup_equipment. One code nudge to continue.
+            nudged = True
+            _record(state, "guardrail:nudge", {}, {"message": NUDGE_TEXT})
+            messages.append({"role": "user", "content": NUDGE_TEXT})
+            continue
         for c in calls:
             name = c["function"]["name"]
             try:
@@ -466,22 +645,45 @@ def build_facts(state: AgentState) -> dict[str, Any]:
         "savings_pct": round(100 * savings / asap.total_cost, 1) if asap.total_cost > 0 else 0.0,
         "violations": len(vs), "violation_kinds": sorted({v.kind for v in vs}),
         "replanned": [f"{fmt_hour(a)} to {fmt_hour(b)}" for a, b in state.excluded.get(t.id, [])],
+        "choice": _choice_facts(state, t.id),
+        "incident": ({k: state.incident[k] for k in ("label", "title", "equipment", "zone", "source")}
+                     if state.incident else None),
     }
 
 
+def _choice_facts(state: AgentState, task_id: str) -> dict[str, Any] | None:
+    """compare_slots/choose_slot numbers as the tools returned them (reason text left out: it's LLM prose)."""
+    c, o = state.choice.get(task_id), state.options.get(task_id)
+    if not c or not o:
+        return None
+    return {"by": c["by"], "compared": c["compared"], "chosen": f"{c['start']} to {c['end']}",
+            "cheapest": c["cheapest"], "vs_cheapest": c["vs_cheapest"],
+            "options": [{"label": x["label"], "start": x["start"], "task_cost": x["task_cost"],
+                         "week_total": x["week_total"], "safe": x["safe"]} for x in o["options"]]}
+
+
 def facts_text(f: dict[str, Any]) -> str:
+    inc, ch = f.get("incident"), f.get("choice")
     lines = [
+        f"Alarm ({inc['source']}) at {inc['label']}: {inc['title']} ({inc['equipment']}, zone {inc['zone']}); "
+        f"no operator in the loop." if inc else "",
         f"New task {f['task_id']}: {f['task']} ({f['equipment']}, zone {f['zone']}, racks {f['racks']}, "
         f"{f['duration_hrs']} h; allowed {', '.join(f['windows'])}).",
         f"Optimized plan runs it {f['scheduled']}." + (
             f" Re-planned to avoid overheating/conflicts: kept it out of {', '.join(f['replanned'])}."
             if f.get("replanned") else ""),
+        (f"{'Nemotron' if ch['by'] == 'nemotron' else 'The planner'} compared {ch['compared']} slot{'s' if ch['compared'] != 1 else ''} and chose "
+         f"{ch['chosen']} (cheapest safe was {ch['cheapest'] or 'none'}, "
+         f"{'+' if ch['vs_cheapest'] >= 0 else '-'}${abs(ch['vs_cheapest']):,.2f})." if ch else ""),
+        ("Options: " + "; ".join(f"{o['label']} {o['start']}: task ${o['task_cost']:,.2f}, week "
+                                 f"${o['week_total']:,.2f}{'' if o['safe'] else ' (unsafe)'}" for o in ch["options"]) + "."
+         if ch and inc else ""),
         f"Week total: optimized ${f['optimized_total']:,.2f} vs ASAP ${f['asap_total']:,.2f}, "
         f"saving ${f['savings']:,.2f} ({f['savings_pct']}%).",
         "Simulation: no cooling-zone conflicts or overheating." if not f["violations"] else
         f"Simulation: {f['violations']} violation(s) remain ({', '.join(f['violation_kinds'])}); needs review.",
     ]
-    return " ".join(lines)
+    return " ".join(x for x in lines if x)
 
 
 _NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
@@ -517,39 +719,64 @@ def _safe_error(e: Exception) -> str:
     return msg.replace(key, "***") if key else msg
 
 
+def _code_choice(state: AgentState, prefix: str) -> None:
+    """Incidents must end with a priced decision: if Nemotron didn't make one (offline, pinned parse,
+    skipped step), code compares the slots and takes the cheapest safe one."""
+    t = state.tasks[-1]
+    if t.id in state.choice:
+        return
+    cmp = compare_slots(state, t.id)
+    _record(state, f"{prefix}compare_slots", {"task_id": t.id}, cmp)
+    s = cmp.get("cheapest_safe_start_hour")
+    if s is None:
+        return
+    args = {"task_id": t.id, "start_hour": s, "reason": "cheapest safe option (chosen by code)"}
+    _record(state, f"{prefix}choose_slot", args, choose_slot(state, t.id, s, args["reason"], by="code"))
+
+
 def run_request(text: str, llm: LLM | None,
-                on_event: Callable[[dict[str, Any]], None] | None = None) -> AgentResponse:
-    """on_event (optional) gets thinking/tool/explaining events as they happen (/request/stream)."""
-    state = AgentState(text=text, on_event=on_event)
+                on_event: Callable[[dict[str, Any]], None] | None = None, *,
+                base: list[Task] | None = None, asap_base: list[Task] | None = None,
+                system_prompt: str = SYSTEM_PROMPT, cached: Task | None = None,
+                incident: dict[str, Any] | None = None, mode: str = "cloud") -> AgentResponse:
+    """on_event (optional) gets thinking/tool/explaining events as they happen (/request/stream).
+    `incident` (with base/asap_base = the frozen week and cached = its expected task) runs the same
+    machinery for an alarm with no operator: /incident/stream."""
+    state = AgentState(text=text, on_event=on_event, base=base, asap_base=asap_base, mode=mode,
+                       id_prefix="I" if incident else "R", incident=incident)
     if llm is not None:
         try:
-            _run_llm_loop(state, llm)
+            _run_llm_loop(state, llm, system_prompt)
             state.llm_used = True
         except Exception as e:
             _record(state, "llm_error", {}, {"error": _safe_error(e)})
             llm = None
 
     prefix = "guardrail:"
-    cached = match_demo(text)
+    cached = cached if cached is not None else match_demo(text)
     # Rehearsed demo request: pin the known-correct Task so the demo is identical every run
     # (live test: Nemotron sometimes dropped one of "Wed or Fri").
     if state.tasks and cached is not None:
         got = state.as_requested(state.tasks[-1]).model_dump(exclude={"id", "name"})
         if got != cached.model_dump(exclude={"id", "name"}):
-            state = AgentState(text=text, tool_calls=state.tool_calls, llm_used=state.llm_used, on_event=on_event)
+            state = state.fresh(llm_used=state.llm_used)
             run_tool(state, "add_task", cached.model_dump())
             _record(state, "guardrail:pinned_demo_task", cached.model_dump(), {"task": cached.model_dump()})
     if not state.tasks:
         if cached is None:
-            why = "couldn't turn that request into a task" if state.llm_used else \
-                  "Nemotron is offline and this isn't a rehearsed request"
+            why = ("couldn't turn that request into a task" if state.llm_used else
+                   "hit a Nemotron error (rate limit or network) and this isn't a rehearsed request"
+                   if "llm_error" in state.tool_calls else
+                   "Nemotron is offline and this isn't a rehearsed request")
             return AgentResponse(task=None, plan=None, tool_calls=state.tool_calls,
                                  explanation=f"Sorry, the agent {why}. Try naming the equipment, "
                                              "duration and allowed days, e.g. 'UPS-B battery swap, 3 hrs, vendor only Wed or Fri'.")
-        state = AgentState(text=text, tool_calls=state.tool_calls, on_event=on_event)
+        state = state.fresh()
         _record(state, "fallback:add_task", cached.model_dump(), run_tool(state, "add_task", cached.model_dump()))
         prefix, llm = "fallback:", None
 
+    if incident is not None:
+        _code_choice(state, prefix)
     _finish_pipeline(state, prefix)
     emit(state, {"type": "explaining"})
     return AgentResponse(task=state.as_requested(state.tasks[-1]), plan=state.plans["optimized"],
@@ -562,11 +789,10 @@ def handle_request(req: AgentRequest) -> AgentResponse:
     return run_request(req.text, get_llm())
 
 
-@router.post("/request/stream")
-def handle_request_stream(req: AgentRequest) -> StreamingResponse:
-    """Same run as POST /request, as NDJSON events the moment they happen:
-    start, thinking*, tool*, explaining, done (or error). Labels of the tool events == done.response.tool_calls."""
-    llm = get_llm()
+def _ndjson_stream(start: dict[str, Any], run: Callable[[Callable[[dict[str, Any]], None]], AgentResponse]
+                   ) -> StreamingResponse:
+    """Run the agent in a thread and stream its events as NDJSON: start, thinking*, tool*, explaining,
+    done (or error)."""
     q: queue.Queue[str | None] = queue.Queue()
 
     def put(event: dict[str, Any]) -> None:  # serialize now: later steps mutate the state behind it
@@ -574,14 +800,14 @@ def handle_request_stream(req: AgentRequest) -> StreamingResponse:
 
     def work() -> None:
         try:
-            r = run_request(req.text, llm, on_event=put)
+            r = run(put)
             put({"type": "done", "response": r.model_dump(mode="json")})
         except Exception as e:
             put({"type": "error", "message": _safe_error(e)})
         finally:
             q.put(None)
 
-    put({"type": "start", "text": req.text, "llm": llm is not None})
+    put(start)
     threading.Thread(target=work, daemon=True).start()  # daemon: a dropped client never pins the server
 
     def lines():
@@ -597,6 +823,85 @@ def handle_request_stream(req: AgentRequest) -> StreamingResponse:
 
     return StreamingResponse(lines(), media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.post("/request/stream")
+def handle_request_stream(req: AgentRequest) -> StreamingResponse:
+    """Same run as POST /request, as NDJSON events the moment they happen:
+    start, thinking*, tool*, explaining, done (or error). Labels of the tool events == done.response.tool_calls."""
+    llm = get_llm()
+    return _ndjson_stream({"type": "start", "text": req.text, "llm": llm is not None, "kind": "request"},
+                          lambda put: run_request(req.text, llm, on_event=put))
+
+
+# ---------------------------------------------------------------- autonomous incident (no operator)
+
+
+def freeze_before(tasks: list[Task], plan: Plan, now: int) -> list[Task]:
+    """The week as it stands at hour `now`: jobs that started before `now` stay exactly where `plan`
+    put them; everything else may only start at or after `now`. Never moves the past."""
+    by_item = {i.task_id: i for i in plan.items}
+    out = []
+    for t in tasks:
+        it = by_item.get(t.id)
+        if it is not None and it.start_hour < now:
+            windows = [Window(start_hour=it.start_hour, end_hour=it.end_hour)]
+        else:
+            windows = [Window(start_hour=max(w.start_hour, now), end_hour=w.end_hour) for w in t.allowed_windows
+                       if w.end_hour - max(w.start_hour, now) >= t.duration_hrs]
+        out.append(t.model_copy(update={"allowed_windows": windows}))  # no window left = stays unscheduled
+    return out
+
+
+class IncidentRequest(BaseModel):
+    incident_id: str = "INC1"
+    mode: Mode = "cloud"
+    extra_tasks: list[Task] = []   # e.g. jobs Nemotron added earlier this session
+
+
+def incident_week(inc: dict[str, Any], mode: str = "cloud",
+                  extra_tasks: list[Task] | None = None) -> tuple[list[Task], list[Task]]:
+    """(optimized base, ASAP base): the week each strategy had planned, frozen at the alarm hour.
+    The ASAP baseline keeps its own past, so its business-hours rule still holds for jobs already done."""
+    from . import planner
+    from .backlog import BACKLOG
+    extra = list(extra_tasks or [])
+    known = {t.id for t in extra}
+    tasks = [t for t in BACKLOG if t.id not in known] + extra
+    return tuple(freeze_before(tasks, planner.make_plan(tasks, mode, s), inc["hour"])  # type: ignore[return-value]
+                 for s in ("optimized", "asap"))
+
+
+def run_incident(incident_id: str, llm: LLM | None, on_event: Callable[[dict[str, Any]], None] | None = None,
+                 mode: str = "cloud", extra_tasks: list[Task] | None = None) -> AgentResponse:
+    from .incidents import alarm_text, expected_task, get_incident
+    inc = get_incident(incident_id)
+    if inc is None:
+        raise KeyError(incident_id)
+    base, asap_base = incident_week(inc, mode, extra_tasks)
+    return run_request(alarm_text(inc), llm, on_event, base=base, asap_base=asap_base,
+                       system_prompt=INCIDENT_SYSTEM_PROMPT, cached=expected_task(incident_id),
+                       incident=inc, mode=mode)
+
+
+@router.get("/incidents")
+def list_incidents() -> list[dict[str, Any]]:
+    from .incidents import INCIDENTS
+    return INCIDENTS
+
+
+@router.post("/incident/stream")
+def handle_incident_stream(req: IncidentRequest) -> StreamingResponse:
+    """An alarm fires with no operator: Nemotron triages it, prices fix-now vs later and schedules the
+    repair. Same NDJSON events as /request/stream; `start` adds kind="incident" and the incident."""
+    from .incidents import alarm_text, get_incident
+    inc = get_incident(req.incident_id)
+    if inc is None:
+        raise HTTPException(status_code=404, detail=f"unknown incident_id '{req.incident_id}'")
+    llm = get_llm()
+    return _ndjson_stream({"type": "start", "text": alarm_text(inc), "llm": llm is not None,
+                           "kind": "incident", "incident": inc},
+                          lambda put: run_incident(req.incident_id, llm, put, req.mode, req.extra_tasks))
 
 
 # ---------------------------------------------------------------- shift handoff (NMC² "unclear handoff")

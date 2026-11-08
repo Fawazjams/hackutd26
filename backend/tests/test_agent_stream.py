@@ -38,7 +38,7 @@ def tools(events):
 def test_happy_path_event_order_and_labels(monkeypatch):
     use_llm(monkeypatch, happy_script)
     ev = stream(UPS_TEXT)
-    assert ev[0] == {"type": "start", "text": UPS_TEXT, "llm": True}
+    assert ev[0] == {"type": "start", "text": UPS_TEXT, "llm": True, "kind": "request"}
     assert ev[-1]["type"] == "done"
     types = [e["type"] for e in ev]
     assert types.index("explaining") == len(ev) - 2          # explanation runs last, right before done

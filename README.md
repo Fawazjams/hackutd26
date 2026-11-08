@@ -33,6 +33,8 @@ GPU compute now has a market price that moves day to day, so every hour of plann
    POST /simulate    hourly racks, zone temps, violations   simulate.py
    POST /request     Nemotron agent loop              agent.py
    POST /request/stream  same run, NDJSON events live  agent.py
+   GET  /incidents   simulated alarms (ASSUMED)       incidents.py
+   POST /incident/stream  alarm -> Nemotron triages + schedules the repair, no operator  agent.py
    POST /handoff     shift handoff brief              agent.py
         │  tool calls (OpenAI-compatible API)
         ▼
@@ -45,8 +47,9 @@ GPU compute now has a market price that moves day to day, so every hour of plann
 | Requirement | How we meet it |
 |---|---|
 | Beyond a chatbot | Nemotron turns a plain-English request into a scheduled task in the plan and a work handoff, not a chat reply |
-| Multi-step workflows | Nemotron chains lookup → windows → add task → plan → simulate, and re-plans when the simulator reports violations |
-| Tool integration | 7 tools backed by our planner, simulator and price service, called through Nemotron's function calling |
+| Multi-step workflows | Nemotron chains lookup → windows → add task → compare slots → choose slot → plan → simulate, and re-plans when the simulator reports violations |
+| Decides, not just parses | Nemotron picks the slot among priced options (each a full week plan + hall sim); code refuses unsafe picks. A simulated alarm (CRAC-3, Wed 14:00) triggers it with no human prompt |
+| Tool integration | 9 tools backed by our planner, simulator and price service, called through Nemotron's function calling |
 | Real-world applicability | Maintenance scheduling with vendor windows, cooling redundancy and SLA exposure |
 
 **NMC²: Keep the World Running**

@@ -86,8 +86,11 @@ Real telemetry instead of the simulated hall, a live price feed, a solver for bi
 **10. "Are those prices real?"**
 "The history is real: weekly H100 rental prices from 46 providers, from GetDeploying's open dataset. Today's median is about $4 an hour. That's in line with Silicon Data's public H100 index at $3.04 and the Ornn index, which went from $2.31 to $4.95 in about two months. The day-by-day forecast for this week is our model, and it's a snapshot, not a live feed."
 
-**11. Which tracks, and how do you meet them?**
-- **NVIDIA "Beyond a chatbot":** Nemotron plans and executes a multi-step workflow (lookup, windows, add task, plan, simulate, re-plan) through 7 tools, for a real operations problem.
+**11. "What does Nemotron actually decide, and what does code do?"**
+"Nemotron decides; code computes. It parses the request, then calls compare_slots, which prices every candidate slot: cheapest safe, earliest, business-hours ASAP, wait a day. Each option is a full week plan plus a hall simulation. Nemotron picks one with a reason, for example earliest safe when the operator says 'as soon as possible'. When an alarm fires, like the simulated CRAC-3 vibration alarm Wednesday 14:00, nobody types anything: Nemotron triages it, prices fixing now against waiting, and schedules the repair. Code computes every number and refuses an unsafe pick, so the model can choose but can't overheat the hall or invent a dollar figure."
+
+**12. Which tracks, and how do you meet them?**
+- **NVIDIA "Beyond a chatbot":** Nemotron plans and executes a multi-step workflow (lookup, windows, add task, compare slots, choose slot, plan, simulate, re-plan) through 9 tools, chooses between priced options, and acts on a simulated alarm with no human prompt.
 - **NMC² "keep the world running":** it catches the warning before it happens (overheat), puts the right information at the right time (priced schedule), and fixes the unclear handoff (shift brief).
 
 ---

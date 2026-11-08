@@ -45,6 +45,15 @@
 **Unscripted (hand to a judge), suggest:**
 - *"Swap the fan tray on CRAC-1, about 2 hours, any weekday afternoon"* (tested live, clean).
 
+## Incident beat (autonomous, no prompt)
+The CRAC-3 vibration alarm (simulated telemetry, `GET /incidents`) fires at **Wed 14:00**: either when week
+playback reaches Wed 14:00 or via the **Trigger alarm** button. It calls `POST /incident/stream`.
+Say: "Nobody typed that. An alarm fired, and Nemotron is handling it on its own: it looks up CRAC-3, adds the
+repair, prices fixing now against waiting a day, picks the cheapest safe slot, and schedules it. Everything
+before 14:00 stays where it was." Seeded result (offline fallback gives the same): repair **Wed 14:00-17:00**,
+waiting a day would cost **+$210.24** (risk grows 4%/day, ASSUMED), no overheating. Point at the
+`compare_slots` → `choose_slot` steps in the trace: that's the model deciding, code doing the math.
+
 ## If it breaks, say this
 - **Agent/API fails:** "Nemotron's rate-limited right now. Here's the same request from our rehearsal." Then show the saved run. "The plan and the numbers come from our optimizer either way; the model only parses and explains."
 - **Backend down:** the UI falls back to saved `/plan` output. "This is the exact output from the backend, saved, because the result is deterministic."
