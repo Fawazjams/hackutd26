@@ -42,3 +42,13 @@ COOLING_LOSS_C = 10.0             # ASSUMED: rise × online-rack share when the 
 COOLING_LOSS_NO_BACKUP_C = 20.0   # ASSUMED: same, but a neighbor's cooling is also down, so no backup
 NEIGHBOR_LOAD_C = 1.5             # ASSUMED: rise when a neighbor zone leans on this zone's cooling
 THERMAL_RESPONSE = 0.6            # ASSUMED: share of the gap to target temp closed each hour (thermal inertia)
+
+# Cost model (owner: Loki, from Fawaz's lane; see app/prices.py)
+EMERGENCY_PREMIUM = 0.20          # ASSUMED: unplanned failure = UNPLANNED_COST_MULTIPLIER x planned, +20% emergency premium
+# Seeded daily H100 $/GPU-hr forecast. Day 0 = Silicon Data public index level ($3.04); the shape
+# (Tue dip, Wed-Thu peak, weekend cheaper) is ASSUMED. NOT a live feed.
+DAILY_PRICE = [3.04, 2.86, 3.15, 3.24, 3.12, 2.84, 2.92]   # within the ±10% band of day 0
+# Hourly utilization (ASSUMED, seeded): kept in a narrow band with small dips so the daily price,
+# not invented hourly noise, drives most scheduling decisions.
+UTIL_BAND = (0.93, 0.96)          # ASSUMED: normal busy share
+UTIL_DIP = (0.92, 0.93)           # ASSUMED: brief dips at job boundaries
