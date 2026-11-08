@@ -31,10 +31,10 @@ Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21
 - [x] ~~Loki: make the daily price curve drive decisions~~ superseded by real prices (see status log) (savings should come mostly from price, not invented utilization dips); flatten/dampen utilization dips; re-run test_optimized_beats_asap and regenerate fallback-plans.js.
 
 **P1: before 04:00 (polish that judges see)**
-- [ ] Nandhan: 3D hall (scene.js): racks go dark on schedule, zones glow red on overheat during ASAP playback.
+- [x] Nandhan: 3D hall (scene.js): racks go dark on schedule, zones glow red on overheat during ASAP playback.
 - [ ] Loki: agent re-plan for real: when the new task causes a violation, Nemotron sees it from `simulate` and re-plans (needs thermal-aware planner); trace shows the re-plan.
 - [ ] Loki (NMC² "unclear handoff"): `/handoff`: Nemotron writes a shift handoff / work order per scheduled task from tool numbers only (what, when, racks, zone temps to watch, risk if delayed). Button in the UI.
-- [ ] Nandhan: end-of-week summary shows $ saved and "0 overheats vs 5" side by side.
+- [x] Nandhan: end-of-week summary shows $ saved and "0 overheats vs 5" side by side.
 
 **P2: 04:00-06:00 harden**
 - [ ] Both: rehearse 3 scripted + 1 unscripted request; same output every run; kill Wi-Fi once and confirm fallback.
@@ -133,7 +133,6 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - With real prices the price rises steadily through the week (~0.5%/day), so price timing alone saves ~1%.
 - The optimized plan is checked against our own thermal sim (simulate.py), whose temperatures and cooling rules are assumed. "Never overheats" means never in that sim.
-- The hall view is a 2D placeholder until the 3D scene lands.
 
 ## Open (still undecided)
 - Product name, track 3, pitch roles, whether to use Higgsfield.
@@ -165,3 +164,4 @@ Sleep in shifts; someone is always building.
 - 22:xx Nandhan: thermal-aware optimizer. Every slot the optimizer takes is checked with `simulate_plan` on the whole plan; cheapest slot that keeps all zones under 32 C wins. ASAP stays unchecked (the baseline). Shortcut: non-cooling tasks only lower temps, so they skip per-slot sims; ~17 ms per plan. Seeded week unchanged: optimized $12,772.56 clean vs ASAP $13,248.58 with 5 overheats; fallback-plans.js still valid. 48 tests.
 - 23:xx Nandhan: real prices. Fawaz's GetDeploying CSVs (H100/H200/B200, weekly Nov 2025-Nov 2026) in backend/data/gpu-prices; app/market.py turns them into a daily forecast for the week of Mon Nov 9 (H100 $4.16 -> $4.28, rising ~0.5%/day). stubs.price() now uses it (Loki: cost model untouched). Seeded week: optimized $17,449 clean vs ASAP $18,101 (5 overheats); saved $652 (3.6%). Real week-to-week moves average 2.7%, so within one week price barely changes the schedule: savings still come from utilization + timing. fallback-plans.js regenerated via backend/scripts/make_fallback.py.
 - 23:xx Nandhan: merged loki/polish into nandhan/thermal-planner (main untouched). Loki's cost model (prices.py, fixed risk term) now reads the real GetDeploying forecast instead of the invented curve (team call: real data). Real prices alone save ~1%, so ASAP's overheats are now priced (Plan.overheat_cost / Plan.overheats, optional fields): seeded week cloud optimized $18,222.79 clean vs ASAP $31,867.40 incl. $13,467.77 for 5 overheat zone-hours -> saved $13,644.61 (42.8%), ~99% of it overheats at the ASSUMED outage rate. Agent tests updated for the heat-aware planner (re-plan path tested with a planner blind to the new task's heat). Ask Nemotron panel wired into main.js; summary shows overheats 0 vs 5. 74 tests.
+- 23:xx Nandhan: 3D hall (frontend/scene.js, Three.js r160): floating-island campus in pixel art (low-res render + depth outlines + dithered palette), cut-away hall whose near walls drop as the camera turns, 40 racks (LEDs online / amber + beacon + tech in maintenance / red when their zone overheats), CRAC/PDU/CDU/UPS/fiber equipment with beacons, day-night lighting from the week clock, embers + red zone glow on ASAP overheats. Drag to orbit, wheel zoom, Q/E turn, click a rack. Deep link ?turn=N. 2D placeholder stays as the fallback.

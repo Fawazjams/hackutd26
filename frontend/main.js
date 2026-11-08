@@ -34,6 +34,7 @@ const S = {
 let dc = null;             // hall API: 3D scene or 2D placeholder
 const rackCache = new Map();
 const equipCache = new Map();
+const zoneAlertCache = new Map();
 let priceChart = null, gantt = null;
 
 // ---------------------------------------------------------------- hall wiring
@@ -65,7 +66,7 @@ async function initHall() {
     dc = createPlaceholderHall(stage);
   }
   $('stage-loading')?.remove();
-  rackCache.clear(); equipCache.clear();
+  rackCache.clear(); equipCache.clear(); zoneAlertCache.clear();
   call('onRackClick', onRackClick);
   call('setView', { ...S.view });
   call('setPaused', !S.playing);
@@ -283,6 +284,14 @@ function applyHall(now) {
   for (const eq of S.d.equipment) {
     const st = busyEq.has(eq) ? 'maintenance' : 'normal';
     if (equipCache.get(eq) !== st) { equipCache.set(eq, st); call('setEquipmentState', eq, st); }
+  }
+  // overheats in the shown plan this hour -> zone glows red (fades in over the hour)
+  const hr = Math.floor(S.t);
+  const hot = new Map();
+  for (const o of plan.overheats || []) if (o.hour === hr) hot.set(o.zone, Math.max(hot.get(o.zone) || 0, clamp01((o.temp_c - 31) / 3)));
+  for (const z of ['Z1', 'Z2', 'Z3', 'Z4']) {
+    const lvl = hot.get(z) || 0;
+    if (zoneAlertCache.get(z) !== lvl) { zoneAlertCache.set(z, lvl); call('setZoneAlert', z, lvl); }
   }
   call('setHour', S.t);
 }
@@ -561,7 +570,8 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   if (['1', '4', '16'].includes(Q.get('speed'))) { S.speed = Number(Q.get('speed')); setSeg('seg-speed', Q.get('speed')); }
   wireControls();
   pushView();
-  initHall();
+  // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)
+  initHall().then(() => { for (let i = 0; i < (Number(Q.get('turn')) || 0) % 4; i++) call('rotate', +1); });
   initAgentPanel();
   window.addEventListener('agent:plan', onAgentPlan);
   loadMode(S.mode);
