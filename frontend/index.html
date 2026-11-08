@@ -84,6 +84,13 @@
 
   <!-- Top-center of the stage, stacked: a simulated alarm, then what Nemotron is doing / the job it added -->
   <div class="stage-top">
+  <!-- key moment of the week: why ASAP overheats, what our plan does instead (ui/play-by-play.js) -->
+  <section class="beat" id="beat" hidden aria-live="polite" aria-label="Key moment">
+    <div class="bt-head"><span class="bt-kicker">Key moment, <span id="bt-when"></span></span><button class="bt-x" id="bt-close" aria-label="Close">×</button></div>
+    <div id="bt-list"></div>
+    <ol class="bt-log" id="bt-log" hidden></ol>
+  </section>
+
   <section class="alarm" id="alarm" hidden role="alert" aria-label="Simulated alarm">
     <div class="al-head"><span class="al-dot" aria-hidden="true"></span><span class="al-kicker">Alarm, <span id="al-when"></span></span><button class="al-x" id="al-close" aria-label="Dismiss alarm">×</button></div>
     <div class="al-title" id="al-title"></div>
@@ -171,6 +178,7 @@
       </div>
       <div class="gantt" id="gantt"></div>
       <input type="range" class="slider" id="scrub" min="0" max="168" step="0.25" value="0" aria-label="Hour of week" />
+      <label class="explain-row"><input type="checkbox" id="chk-explain" checked /> Explain key moments as the week plays</label>
     </section>
 
     <section class="sec">

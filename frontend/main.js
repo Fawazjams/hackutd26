@@ -10,6 +10,10 @@ import {
 import { HOURS, DAYS, hourLabel, money, num, pct, esc, shortName } from './ui/format.js';
 import { createPriceChart, createGantt } from './ui/charts.js';
 import { createPlaceholderHall } from './ui/placeholder-hall.js';
+import { buildBeats } from './ui/play-by-play.js';
+
+const BEAT_HOLD_MS = 3000;       // explain mode: pause this long on each key moment
+const BEAT_LEAD_HRS = 1.5;       // ...and play the lead-in to it at 1x
 
 const $ = (id) => document.getElementById(id);
 const SEC_PER_HOUR = 0.5;        // 1× playback: half a second per simulated hour
@@ -41,6 +45,10 @@ const S = {
   alarm: null,             // alarm on screen: { inc, wasPlaying }
   slotMarks: null,         // slots Nemotron compared for the new job: { options, chosen }
   slowed: false,
+  explain: true,           // key moments: slow to 1x, hold BEAT_HOLD_MS, show the card
+  hold: 0,                 // performance.now() until which playback holds on a key moment
+  beats: [],               // key moments built from the two plans (ui/play-by-play.js)
+  beatLog: [],
   summaryDismissed: false,
   view: { pixelArt: false, pixelSize: 3, outlines: true, palette: false },
   loadToken: 0,
@@ -188,6 +196,8 @@ async function loadMode(mode) {
 function applyRaw(raw, at = null) {
   S.raw = raw;
   S.d = prepare(raw);
+  S.beats = buildBeats(S.d.plans.optimized, S.d.plans.asap);
+  S.beatLog = []; S.hold = 0; hideBeat();
   $('offline-chip').hidden = !raw.offline;
   buildLadder();
   priceChart = createPriceChart($('price-chart'), raw.prices);
@@ -604,6 +614,7 @@ function restart() {
   if (!S.agent) hideAlarm();
   pendingAlarm = null;
   lastNewJobState = '';
+  S.beatLog = []; S.hold = 0; hideBeat();
   S.t = 0;
   S.summaryDismissed = false;
   lastTickerKey = '';
@@ -755,6 +766,7 @@ function updateScoreboard() {
   const status = S.t >= HOURS ? 'Final'
     : pendingAlarm ? 'Alarm: waiting for Nemotron to finish'
     : !S.playing ? 'Paused'
+    : S.hold > performance.now() ? 'Key moment'
     : S.boosting ? 'Skipping quiet hours'
     : S.slowed ? 'Slowed down for the new job'
     : `Playing at ${S.speed}×, day ${Math.min(7, Math.floor(S.t / 24) + 1)} of 7`;
@@ -942,6 +954,8 @@ function wireControls() {
   $('pixel-size').addEventListener('input', (e) => { S.view.pixelSize = Number(e.target.value); pushView(); });
   $('chk-outlines').addEventListener('change', (e) => { S.view.outlines = e.target.checked; pushView(); });
   $('chk-palette').addEventListener('change', (e) => { S.view.palette = e.target.checked; pushView(); });
+  $('chk-explain').addEventListener('change', (e) => { S.explain = e.target.checked; S.hold = 0; });
+  $('bt-close').addEventListener('click', () => { hideBeat(); S.hold = 0; });
   $('summary-close').addEventListener('click', () => { $('summary').hidden = true; S.summaryDismissed = true; });
   $('summary').addEventListener('click', (e) => { if (e.target === $('summary')) { $('summary').hidden = true; S.summaryDismissed = true; } });
   $('summary-replay').addEventListener('click', restart);
@@ -985,6 +999,22 @@ function wireControls() {
   });
 }
 
+// ---------------------------------------------------------------- key moments
+// Cards built from the two plans by ui/play-by-play.js: why ASAP overheats, what ours does instead.
+function showBeats(group) {
+  const tag = (b) => b.plan === 'asap' ? 'asap' : 'ours';
+  $('bt-when').textContent = hourLabel(group[0].hour);
+  $('bt-list').innerHTML = group.map(b => `
+    <div class="bt-item ${tag(b)}"><span class="bt-tag ${tag(b)}">${b.plan === 'asap' ? 'ASAP' : 'Our plan'}</span>
+      <b>${esc(b.title)}</b><p>${esc(b.text)}</p></div>`).join('');
+  $('bt-log').innerHTML = S.beatLog.slice(-3).reverse()
+    .map(b => `<li><time>${esc(hourLabel(b.hour))}</time> ${esc(b.title)}</li>`).join('');
+  $('bt-log').hidden = !S.beatLog.length;
+  S.beatLog.push(...group);
+  $('beat').hidden = false;
+}
+function hideBeat() { $('beat').hidden = true; }
+
 // ---------------------------------------------------------------- loop
 let last = performance.now();
 function frame(now) {
@@ -992,7 +1022,9 @@ function frame(now) {
   last = now;
   if (S.d) {
     if (S.playing && S.t >= HOURS) setPlaying(false);
+    else if (S.playing && S.hold > now) S.boosting = false;   // a key moment is on screen: hold
     else if (S.playing) {
+      S.hold = 0;
       // never fast-forward through the lead-in to the job the agent just added; play it slower
       const f = S.focus;
       const nearFocus = f && S.t >= f.start - LEAD_HOURS - 1 && S.t < f.end;
@@ -1000,11 +1032,20 @@ function frame(now) {
       S.slowed = !!(f && S.t >= f.start && S.t < f.end);
       let rate = Math.min(MAX_HOURS_PER_SEC, (S.speed / SEC_PER_HOUR) * (S.boosting ? QUIET_BOOST : 1));
       if (S.slowed) rate = Math.min(rate, Math.max(rate * FOCUS_RATE, (f.end - f.start) / FOCUS_MAX_SECS));
+      // explain mode: play the lead-in to the next key moment at 1x so judges see it coming
+      const nb = S.explain ? S.beats.find(b => b.hour > S.t) : null;
+      if (nb && nb.hour - S.t <= BEAT_LEAD_HRS) { S.boosting = false; rate = Math.min(rate, 1 / SEC_PER_HOUR); }
       const before = S.t;
       S.t = Math.min(HOURS, S.t + dt * rate);
       // playback of our plan reached a simulated alarm: stop on its hour and let Nemotron respond
       const inc = crossedIncident(before, S.t);
+      const hit = inc ? [] : S.beats.filter(b => before < b.hour && b.hour <= S.t);
       if (inc) onIncidentReached(inc);
+      else if (hit.length) {
+        const h = hit[0].hour;
+        if (S.explain) { S.t = h; S.hold = now + BEAT_HOLD_MS; }
+        showBeats(hit.filter(b => b.hour === h));
+      }
       else if (S.t >= HOURS) setPlaying(false);
     }
     if (pendingAlarm) firePendingAlarm();
