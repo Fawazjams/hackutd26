@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#17232B;--ours:#0B7A84;--asap:#EA5B1F;--ground:#E8ECEC;--card:#fff;--muted:#5a6a73}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:Barlow,system-ui,sans-serif;line-height:1.5}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 16px 64px}
+a.back{color:var(--ours);font-weight:600;text-decoration:none}
+a.back:hover{text-decoration:underline}
+h1{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:56px;margin:16px 0 4px;letter-spacing:.5px}
+.sub{color:var(--muted);margin:0 0 28px;max-width:60ch}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.tile{background:var(--card);border-radius:12px;padding:18px 20px;border-top:5px solid var(--ours)}
+.tile.o{border-top-color:var(--asap)}
+.tile .n{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:700;font-size:54px;line-height:1;color:var(--ours)}
+.tile.o .n{color:var(--asap)}
+.tile .l{margin-top:6px;font-weight:600}
+.tile .d{color:var(--muted);font-size:14px}
+section{background:var(--card);border-radius:12px;padding:22px 24px;margin-top:18px}
+h2{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:28px;margin:0 0 10px}
+svg{width:100%;height:auto;display:block}
+svg text{font-family:Barlow,sans-serif}
+ul{padding-left:20px;margin:0}li{margin:6px 0}
+.caveat{border-left:5px solid var(--asap);background:#fff6f1}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="/">&larr; Back to the hall</a>
+<h1>Proof</h1>
+<p class="sub">100 seeded weeks we did not design, scored hour by hour. Same hall, same price forecast, same thermal model for both plans.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="n">0</div><div class="l">Optimized overheat weeks</div><div class="d">of 100</div></div>
+  <div class="tile o"><div class="n">59</div><div class="l">ASAP overheat weeks</div><div class="d">of 100</div></div>
+  <div class="tile"><div class="n">45/45</div><div class="l">Planted clashes caught</div><div class="d">ASAP overheated on every one</div></div>
+  <div class="tile"><div class="n">100%</div><div class="l">Optimized cheaper</div><div class="d">like-for-like, 93 weeks</div></div>
+  <div class="tile"><div class="n">$3,091.99</div><div class="l">Median saving per week</div><div class="d">incl. avoided overheat cost</div></div>
+  <div class="tile"><div class="n">$218.66</div><div class="l">Median saving, timing only</div><div class="d">excluding overheat cost</div></div>
+  <div class="tile o"><div class="n">9 vs 0</div><div class="l">Unscheduled jobs</div><div class="d">ASAP vs optimized</div></div>
+</div>
+
+<section>
+  <h2>Weeks with an overheat (out of 100)</h2>
+  <svg viewBox="0 0 640 170" role="img" aria-label="Overheat weeks: optimized 0, ASAP 59 of 100">
+    <text x="0" y="34" font-size="16" font-weight="600" fill="#17232B">Optimized</text>
+    <text x="0" y="104" font-size="16" font-weight="600" fill="#17232B">ASAP</text>
+    <rect x="100" y="14" width="500" height="34" rx="4" fill="#17232B" opacity=".08"/>
+    <rect x="100" y="14" width="3" height="34" fill="#0B7A84"/>
+    <text x="112" y="37" font-size="20" font-weight="700" fill="#0B7A84">0</text>
+    <rect x="100" y="84" width="500" height="34" rx="4" fill="#17232B" opacity=".08"/>
+    <rect x="100" y="84" width="295" height="34" rx="4" fill="#EA5B1F"/>
+    <text x="407" y="108" font-size="20" font-weight="700" fill="#EA5B1F">59</text>
+    <text x="100" y="150" font-size="12" fill="#5a6a73">0</text>
+    <text x="600" y="150" font-size="12" fill="#5a6a73" text-anchor="end">100 weeks</text>
+  </svg>
+</section>
+
+<section>
+  <h2>How we tested</h2>
+  <ul>
+    <li>Seeds 1 to 100. Each week has 5-7 jobs from the equipment catalog (CRAC, CDU, PDU, fiber, UPS) with random duration, failure-risk growth and allowed window.</li>
+    <li>On about 40% of weeks we plant a CRAC job and a CDU job in neighboring cooling zones. If they overlap, those zones lose backup cooling. The planner never sees this answer key.</li>
+    <li>Fixed: 40-rack, 4-zone hall, real-data H100 price forecast, cost model, thermal model.</li>
+    <li>Both plans are simulated hour by hour. Savings are compared only on the 93 weeks where both plans schedule the same jobs.</li>
+  </ul>
+</section>
+
+<section class="caveat">
+  <h2>Honesty caveat</h2>
+  <ul>
+    <li>Every week runs on our <b>assumed</b> thermal and cost model. This shows the planner is robust inside our simulation, not in a real hall.</li>
+    <li>"Optimized never overheats" holds by construction, since it checks every slot against the simulator. The informative numbers are the ASAP catch rate, the savings and the unscheduled jobs.</li>
+    <li>Most of the saving is ASAP's overheats priced as outages at an assumed rate. The $218.66 figure is what timing alone saves.</li>
+  </ul>
+</section>
+</div>
+</body>
+</html>
