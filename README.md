@@ -73,7 +73,7 @@ python scripts/nemotron_check.py --list                # which Nemotron models y
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - CME/Silicon Data and ICE/Ornn have **announced** GPU compute futures. We don't claim they are trading, and we don't claim NMC² uses this market.
 - For the 3 rehearsed demo requests, the parsed task is pinned to a pre-checked version, so the demo is identical every run. Unscripted requests use Nemotron's parse as-is.
-- The optimizer enforces vendor windows and same-zone conflicts. Temperature limits are checked by the simulator. The hall view may be a 2D placeholder.
+- The optimizer enforces vendor windows and same-zone conflicts, and rejects any slot that pushes a zone over 32 °C **in our own (assumed) thermal sim**. "Never overheats" means never in that sim. The ASAP baseline is deliberately unchecked. The hall view may be a 2D placeholder.
 - Savings figures (**$[X]**) depend on the assumed cost model and will be filled in from the final build.
 
 ## Team

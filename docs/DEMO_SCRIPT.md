@@ -19,7 +19,7 @@
 | 0:15–0:30 | Backlog panel + price forecast | "This is one week's backlog: CRAC compressor, PDU breakers, firmware, UPS test, fiber, coolant flush. Here's the H100 price forecast, built from real GetDeploying market prices." |
 | 0:30–0:50 | Click **ASAP plan**, play week | "The usual way is to do it all ASAP. Watch Monday morning: the CRAC-2 replacement and the CDU-3 flush overlap in neighboring zones, both lose their backup cooling, and zones Z2 and Z3 **overheat**. The ASAP plan also costs **$[X]**." |
 | 0:50–1:15 | Click **Plan** (optimized), play week, $ counters side by side | "Our optimizer prices every hour of downtime in market dollars, factors in failure risk that grows while a task waits, and keeps cooling zones apart. Same backlog, **$[Y]**, so **$[X−Y] saved** this week with no overheating." |
-| 1:15–1:45 | Type request 1 into the agent box | "Now a new job comes in." *(type the UPS-B request)* "Nemotron turns it into a task and calls our tools: forecast, optimizer, simulator, and it re-plans if anything overheats. Every number it says comes from our code, not the model." |
+| 1:15–1:45 | Type request 1 into the agent box | "Now a new job comes in." *(type the UPS-B request)* "Nemotron turns it into a task and calls our tools: equipment lookup, day windows, optimizer, then the simulator to check the result. The heat-aware optimizer already keeps it clean; if the sim ever flags a problem, the agent re-plans around it. Every number it says comes from our code, not the model." |
 | 1:45–2:00 | Tool-call trace + explanation | "It fits the swap into the vendor's window at **$[Z]**. Simulated hall, assumed numbers, real market logic. That's [product name]." |
 
 ---

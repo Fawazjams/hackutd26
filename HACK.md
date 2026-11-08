@@ -25,9 +25,9 @@ Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21
 ## Task board (deadline Sun 09:00; Harden phase: finish the journey, no extras)
 **P0: before 01:00 (MVP becomes demo-complete)**
 - [ ] Loki: register team on Devpost by **23:00** (paste docs/DEVPOST.md)
-- [ ] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
+- [x] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
 - [x] Nandhan: thermal-aware optimizer: reject any plan where `simulate.find_conflicts`/`simulate_plan` reports violations (or add a neighbor-cooling rule), so "optimized never overheats" is true by design.
-- [ ] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
+- [x] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
 - [x] ~~Loki: make the daily price curve drive decisions~~ superseded by real prices (see status log) (savings should come mostly from price, not invented utilization dips); flatten/dampen utilization dips; re-run test_optimized_beats_asap and regenerate fallback-plans.js.
 
 **P1: before 04:00 (polish that judges see)**
@@ -95,7 +95,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 |---|---|---|---|
 | Hall size | 40 racks × 32 H100 = 1,280 GPUs | Typical scale for an AI hall row set | None (assumed) |
 | Price forecast | Real H100 on-demand median $4.02/hr (Nov 2, 2026) + 8-week trend; 90% band from 26-week volatility | History is real; the daily forecast is our model | [GetDeploying dataset](https://getdeploying.com/gpu-price-trends) |
-| Hourly utilization | 85–98%, small dips | AI clusters run near full; dips at job boundaries | None (assumed) |
+| Hourly utilization | 93–96%, brief dips to 92–93% | AI clusters run near full; dips at job boundaries | None (assumed) |
 | Risk growth while a task waits | +0.5–2%/day failure chance, by task | Deferred maintenance raises failure odds | None (assumed) |
 | Unplanned failure cost | 3× planned downtime + emergency premium | Unplanned outages run longer and cost more | None (assumed) |
 | Contracted share (GPU-cloud mode) | 70% contracted / 30% open market | Neoclouds pre-sell most capacity | Direction: CoreWeave backlog; value assumed |
@@ -165,3 +165,4 @@ Sleep in shifts; someone is always building.
 - 22:xx Nandhan: thermal-aware optimizer. Every slot the optimizer takes is checked with `simulate_plan` on the whole plan; cheapest slot that keeps all zones under 32 C wins. ASAP stays unchecked (the baseline). Shortcut: non-cooling tasks only lower temps, so they skip per-slot sims; ~17 ms per plan. Seeded week unchanged: optimized $12,772.56 clean vs ASAP $13,248.58 with 5 overheats; fallback-plans.js still valid. 48 tests.
 - 23:xx Nandhan: real prices. Fawaz's GetDeploying CSVs (H100/H200/B200, weekly Nov 2025-Nov 2026) in backend/data/gpu-prices; app/market.py turns them into a daily forecast for the week of Mon Nov 9 (H100 $4.16 -> $4.28, rising ~0.5%/day). stubs.price() now uses it (Loki: cost model untouched). Seeded week: optimized $17,449 clean vs ASAP $18,101 (5 overheats); saved $652 (3.6%). Real week-to-week moves average 2.7%, so within one week price barely changes the schedule: savings still come from utilization + timing. fallback-plans.js regenerated via backend/scripts/make_fallback.py.
 - 23:xx Nandhan: merged loki/polish into nandhan/thermal-planner (main untouched). Loki's cost model (prices.py, fixed risk term) now reads the real GetDeploying forecast instead of the invented curve (team call: real data). Real prices alone save ~1%, so ASAP's overheats are now priced (Plan.overheat_cost / Plan.overheats, optional fields): seeded week cloud optimized $18,222.79 clean vs ASAP $31,867.40 incl. $13,467.77 for 5 overheat zone-hours -> saved $13,644.61 (42.8%), ~99% of it overheats at the ASSUMED outage rate. Agent tests updated for the heat-aware planner (re-plan path tested with a planner blind to the new task's heat). Ask Nemotron panel wired into main.js; summary shows overheats 0 vs 5. 74 tests.
+- 22:30 Loki reviewed + merged PR #3 (includes PR #2) into main. Verified: 74 tests, live server ASAP $31,867.40 (5 overheats) vs optimized $18,222.79 (0), live Nemotron request clean. Pitch note: ~99% of the 42.8% is overheats priced at the ASSUMED outage rate (two of five zone-hours only 32.3/32.7 C); lead with "0 overheats vs 5". Open: confirm GetDeploying data reuse terms before repo goes public.
