@@ -733,6 +733,13 @@ function applyHall(now) {
     const lvl = hot.get(z) || 0;
     if (zoneAlertCache.get(z) !== lvl) { zoneAlertCache.set(z, lvl); call('setZoneAlert', z, lvl); }
   }
+  // cinematic: glide onto the zone that matters right now (ASAP's overheating zone during the
+  // explained story, even while showing our calm hall; the zone Nemotron is working on; the new
+  // job's zone while it runs), and back out to the whole island when nothing is happening
+  const hotPlan = S.explain ? S.d.plans.asap : plan;
+  const hotNow = (hotPlan.overheats || []).filter(o => o.hour === Math.floor(S.t)).sort((x, y) => y.temp_c - x.temp_c)[0];
+  const jobZone = S.focus && S.t >= S.focus.start - 1 && S.t < S.focus.end ? S.d.tasks.get(S.focus.id)?.zone : null;
+  call('focusZone', hotNow?.zone || S.agent?.zone || jobZone || null);
   call('setHour', S.t);
 }
 
