@@ -26,7 +26,7 @@ Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21
 **P0: before 01:00 (MVP becomes demo-complete)**
 - [ ] Loki: register team on Devpost by **23:00** (paste docs/DEVPOST.md)
 - [ ] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
-- [ ] Nandhan: thermal-aware optimizer: reject any plan where `simulate.find_conflicts`/`simulate_plan` reports violations (or add a neighbor-cooling rule), so "optimized never overheats" is true by design.
+- [x] Nandhan: thermal-aware optimizer: reject any plan where `simulate.find_conflicts`/`simulate_plan` reports violations (or add a neighbor-cooling rule), so "optimized never overheats" is true by design.
 - [ ] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
 - [ ] Loki: make the daily price curve drive decisions (savings should come mostly from price, not invented utilization dips); flatten/dampen utilization dips; re-run test_optimized_beats_asap and regenerate fallback-plans.js.
 
@@ -131,7 +131,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 - Don't claim NMC² uses this market, or that CME compute futures are trading.
 - Nemotron rehearsed requests: for the 3 scripted demo requests the parsed task is pinned to a pre-verified version (and used outright if Nemotron is offline/rate-limited). Unscripted requests use Nemotron's parse as-is.
 - Most of the optimized-vs-ASAP savings comes from the assumed hourly utilization dips (stubs.py), not from the daily price curve.
-- The optimizer enforces windows and same-zone conflicts only; it is not thermal-aware. The optimized week happens to pass the overheat check; don't claim it was designed to.
+- The optimized plan is checked against our own thermal sim (simulate.py), whose temperatures and cooling rules are assumed. "Never overheats" means never in that sim.
 - The hall view is a 2D placeholder until the 3D scene lands.
 
 ## Open (still undecided)
@@ -161,3 +161,4 @@ Sleep in shifts; someone is always building.
 - 21:40 Loki merged PR #1 (Nandhan: /plan optimizer + ASAP baseline + planner UI). Contract = Nandhan's app/models.py (mode "cloud", racks "A01".."D10", Plan.items/unscheduled); schemas.py re-exports it. Backlog/simulate/agent adapted; stubs.seeded_backlog() now returns Loki's backlog; fallback-plans.js regenerated. Seeded week: ASAP $13,248.58 with 5 overheat violations (CRAC-2 + CDU-3 Mon 09:00) vs optimized $12,772.56 clean. 44 tests. Open: planner doesn't check thermal (optimized is clean by luck; wire simulate_plan in), /cost still Fawaz's stub (real cost model lives in stubs.slot_cost), /prices served from stubs in main.py.
 - 21:45 hack-check: phase Harden (~11h to cutoff). Weakest: Presentation (no video/rehearsal; Devpost registration unconfirmed, due 23:00). Highest-leverage build fix: wire the disabled "Ask Nemotron" box to POST /request (journey step 4, NVIDIA track). Then: thermal-aware optimizer, /cost from stubs.slot_cost, utilization-vs-price savings story.
 - 21:50 Fawaz's lane redistributed (Loki: prices/cost model; Nandhan: thermal-aware planner + 3D). Task board added.
+- 22:xx Nandhan: thermal-aware optimizer. Every slot the optimizer takes is checked with `simulate_plan` on the whole plan; cheapest slot that keeps all zones under 32 C wins. ASAP stays unchecked (the baseline). Shortcut: non-cooling tasks only lower temps, so they skip per-slot sims; ~17 ms per plan. Seeded week unchanged: optimized $12,772.56 clean vs ASAP $13,248.58 with 5 overheats; fallback-plans.js still valid. 48 tests.

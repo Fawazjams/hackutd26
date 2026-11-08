@@ -95,3 +95,42 @@ def test_plan_endpoint():
     assert len(opt["items"]) == 6
     t = seeded_backlog()[0].model_dump()
     assert client.post("/plan", json={"tasks": [t, t]}).status_code == 422
+
+
+# ---- thermal awareness -------------------------------------------------------
+from app.backlog import BACKLOG  # noqa: E402
+from app.simulate import simulate_plan  # noqa: E402
+from app.stubs import CostBreakdown  # noqa: E402
+
+
+def _overheats(plan, tasks):
+    return [v for v in simulate_plan(plan, {t.id: t for t in tasks}).violations
+            if v.kind == "overheat"]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_optimized_never_overheats(mode):
+    tasks = seeded_backlog()
+    assert _overheats(make_plan(tasks, mode, "optimized"), tasks) == []
+
+
+def test_asap_baseline_still_overheats():
+    # The demo contrast: the naive plan stacks CRAC-2 and CDU-3 on Monday morning.
+    tasks = seeded_backlog()
+    assert _overheats(make_plan(tasks, "cloud", "asap"), tasks)
+
+
+def test_thermal_check_separates_neighbor_cooling_outages():
+    # CRAC-2 (Z2) and CDU-3 (Z3) are in different zones, so the zone rule allows overlap,
+    # and a cost function that makes the same hour cheapest for both pulls them together.
+    # Only the thermal check keeps them apart.
+    crac, cdu = (next(t for t in BACKLOG if t.id == i) for i in ("T1", "T6"))
+    tasks = [crac, cdu]
+    def same_hour_cheapest(task, start, mode):
+        return CostBreakdown(downtime=abs(start - 32), sla=0.0, risk=0.0)
+    plan = make_plan(tasks, "cloud", "optimized", same_hour_cheapest)
+    assert not plan.unscheduled
+    assert _overheats(plan, tasks) == []
+    # Without the check both would start at hour 32 (zones differ, so no zone conflict).
+    # Zones heat up gradually, so a short overlap can be safe; a full stack is not.
+    assert len({i.start_hour for i in plan.items}) == 2

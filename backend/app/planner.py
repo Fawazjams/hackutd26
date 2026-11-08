@@ -3,6 +3,10 @@
 Rules both strategies obey:
   - a task runs entirely inside one of its allowed windows
   - two tasks in the same cooling zone never overlap
+The optimized plan also never overheats: every slot it takes is checked against
+the hall thermal sim (simulate.simulate_plan) for the whole plan so far, and the
+cheapest slot that keeps every zone under the limit wins. ASAP skips this check
+on purpose; it is the naive baseline.
 
 ASAP baseline: the "just do it now" plan. In backlog order, each task takes the
 earliest slot that starts during business hours (Mon-Fri, 09:00-17:00).
@@ -10,8 +14,8 @@ earliest slot that starts during business hours (Mon-Fri, 09:00-17:00).
 Optimized: 1) greedy - most urgent task first (fastest-growing failure risk),
 each takes its cheapest open slot; 2) improve - repeatedly lift each task out and
 drop it back in its cheapest open slot until nothing gets cheaper. The improve
-step is also run starting from the ASAP plan and the cheaper result wins, so the
-optimized plan never costs more than ASAP.
+step is also run starting from the ASAP plan when that plan is thermally clean;
+the cheaper clean result wins.
 
 Everything is deterministic: ties go to the earliest hour, then task id.
 """
@@ -21,6 +25,7 @@ from collections.abc import Callable
 from .models import (
     HOURS_IN_WEEK, Mode, Plan, PlanItem, PlanRequest, Strategy, Task, Unscheduled, hour_label,
 )
+from .simulate import is_cooling_task, simulate_plan
 from .stubs import GPUS_PER_RACK, CostBreakdown, seeded_backlog, slot_cost
 
 CostFn = Callable[[Task, int, Mode], CostBreakdown]
@@ -69,19 +74,44 @@ class _Planner:
         self.costs: dict[str, dict[int, CostBreakdown]] = {
             t.id: {s: cost_fn(t, s, mode) for s in self.starts[t.id]} for t in tasks
         }
+        self.by_cost = {
+            tid: sorted(c, key=lambda s, c=c: (c[s].total, s)) for tid, c in self.costs.items()
+        }
+        self._heat_cache: dict[frozenset, bool] = {}
 
-    def best_start(self, task: Task, schedule: Schedule, only_business: bool = False,
-                   earliest: bool = False) -> int | None:
-        candidates = [
-            s for s in self.starts[task.id]
-            if (not only_business or is_business_hour_start(s))
-            and not _conflicts(task, s, schedule, self.by_id)
-        ]
-        if not candidates:
-            return None
-        if earliest:
-            return candidates[0]
-        return min(candidates, key=lambda s: (self.costs[task.id][s].total, s))
+    def overheats(self, schedule: Schedule) -> bool:
+        """True if the hall thermal sim reports any overheat for this schedule."""
+        key = frozenset(schedule.items())
+        if key not in self._heat_cache:
+            items = [
+                PlanItem.model_construct(task_id=tid, start_hour=s,
+                                         end_hour=s + self.by_id[tid].duration_hrs)
+                for tid, s in sorted(schedule.items())
+            ]
+            sim = simulate_plan(Plan.model_construct(items=items), self.by_id)
+            self._heat_cache[key] = any(v.kind == "overheat" for v in sim.violations)
+        return self._heat_cache[key]
+
+    def asap_start(self, task: Task, schedule: Schedule) -> int | None:
+        """Earliest business-hours start with no same-zone overlap. No thermal check."""
+        return next(
+            (s for s in self.starts[task.id]
+             if is_business_hour_start(s) and not _conflicts(task, s, schedule, self.by_id)),
+            None,
+        )
+
+    def best_start(self, task: Task, schedule: Schedule) -> int | None:
+        """Cheapest start with no same-zone overlap that keeps the whole plan from overheating."""
+        # Shortcut: in the sim, taking racks offline only ever lowers zone temps; only cooling
+        # outages raise them. So a non-cooling task added to a plan that is already clean
+        # can't cause an overheat, and needs no per-slot sim.
+        safe_anywhere = not is_cooling_task(task) and not self.overheats(schedule)
+        for s in self.by_cost[task.id]:  # cheapest first; the sim only runs on candidates
+            if _conflicts(task, s, schedule, self.by_id):
+                continue
+            if safe_anywhere or not self.overheats({**schedule, task.id: s}):
+                return s
+        return None
 
     def total(self, schedule: Schedule) -> float:
         return sum(self.costs[tid][s].total for tid, s in schedule.items())
@@ -89,7 +119,7 @@ class _Planner:
     def asap(self) -> Schedule:
         schedule: Schedule = {}
         for task in self.tasks:  # backlog order
-            start = self.best_start(task, schedule, only_business=True, earliest=True)
+            start = self.asap_start(task, schedule)
             if start is not None:
                 schedule[task.id] = start
         return schedule
@@ -125,7 +155,17 @@ class _Planner:
         return schedule
 
     def optimized(self) -> Schedule:
-        options = [self.improve(self.greedy()), self.improve(self.asap())]
+        # greedy+improve is thermally clean by construction (every placement is checked).
+        # Improving from ASAP is only tried when ASAP is itself clean: from an overheating
+        # start it can't reach a clean plan, and costs hundreds of sim runs to find that out.
+        # So when ASAP is clean, optimized never costs more than ASAP; when ASAP overheats,
+        # the optimized plan is the safe one.
+        options = [self.improve(self.greedy())]
+        asap = self.asap()
+        if not self.overheats(asap):
+            from_asap = self.improve(asap)
+            if not self.overheats(from_asap):
+                options.append(from_asap)
         # Prefer scheduling more tasks, then lower cost.
         return min(options, key=lambda s: (-len(s), round(self.total(s), 6)))
 
@@ -157,7 +197,8 @@ class _Planner:
             return "no allowed window is long enough for this task"
         if strategy == "asap" and not any(is_business_hour_start(s) for s in self.starts[task.id]):
             return "no business-hours start inside its allowed windows"
-        return "every allowed slot clashes with another task in the same cooling zone"
+        return ("every allowed slot clashes with another task in the same cooling zone "
+                "or overheats a zone")
 
 
 def make_plan(tasks: "list[Task] | PlanRequest", mode: Mode | None = None,
