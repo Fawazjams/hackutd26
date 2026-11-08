@@ -111,7 +111,8 @@ function mount({ container, getHall } = {}) {
   const status = el('div', { class: 'pc-status', role: 'status', 'aria-live': 'polite' });
   const body = el('div', { class: 'pc-body', 'aria-live': 'polite' });
   const ledger = el('ol', { class: 'pc-ledger' });
-  const ledgerWrap = el('div', { class: 'pc-ledger-wrap', hidden: true }, el('div', { class: 'pc-h', text: 'Ledger' }), ledger);
+  const ledgerHead = el('summary', { class: 'pc-h', text: 'Ledger' });
+  const ledgerWrap = el('details', { class: 'pc-ledger-wrap', hidden: true }, ledgerHead, ledger);
 
   const box = el('div', { class: 'pc-box' },
     el('div', { class: 'sec-label' }, el('span', { text: 'Replacement compute' })),
@@ -165,11 +166,12 @@ function mount({ container, getHall } = {}) {
       if (my !== runId) return;
       const neg = byProv.get(p.id);
       const chat = el('ol', { class: 'pc-chat' });
-      const outcome = el('div', { class: 'pc-outcome' });
-      const card = el('div', { class: 'pc-card', 'data-state': 'talking' },
-        el('div', { class: 'pc-card-head' }, el('b', { text: p.name })),
-        el('div', { class: 'pc-facts', text: `${p.region} · ${p.uptime_pct}% uptime · ${num(p.gpus_available)} GPUs · ${p.lead_time_hrs} h lead time` }),
-        chat, outcome);
+      const outcome = el('span', { class: 'pc-outcome', text: 'negotiating…' });
+      // open while the agents talk; folds to one line (click to reopen) once there's an outcome
+      const card = el('details', { class: 'pc-card', 'data-state': 'talking', open: true },
+        el('summary', { class: 'pc-card-head' }, el('b', { text: p.name }), outcome),
+        el('div', { class: 'pc-facts', text: `${p.region}, ${p.uptime_pct}% uptime, ${num(p.gpus_available)} GPUs, ${p.lead_time_hrs} h lead time` }),
+        chat);
       body.append(card);
       await hallCall(getHall, 'setProviderState', [p.id, 'talking']);
       await hallCall(getHall, 'sendNegotiator', [p.id], 900);
@@ -180,7 +182,8 @@ function mount({ container, getHall } = {}) {
       }
       const ok = neg?.outcome === 'deal';
       card.dataset.state = ok ? 'deal' : 'no_deal';
-      outcome.textContent = ok ? `Deal at ${rate(neg.final_price)}/GPU-hr` : 'No deal: price stayed above break-even';
+      outcome.textContent = ok ? `Deal, ${rate(neg.final_price)}/GPU-hr` : 'No deal, above break-even';
+      card.open = false;
       await hallCall(getHall, 'setProviderState', [p.id, ok ? 'deal' : 'no_deal']);
       await hallCall(getHall, 'returnNegotiator', [], 900);
     }
@@ -208,17 +211,15 @@ function mount({ container, getHall } = {}) {
     const decided = el('div', { class: 'pc-decided' });
     const accept = el('button', { type: 'button', class: 'pc-btn', text: 'Accept' });
     const decline = el('button', { type: 'button', class: 'pc-btn pc-ghost', text: 'Decline' });
-    const offer = el('div', { class: 'pc-offer' },
-      el('div', { class: 'pc-h', text: 'Offer: needs your approval' }),
-      el('div', { class: 'pc-offer-name', text: pr.provider_name }),
-      el('dl', { class: 'pc-grid' },
-        el('dt', { text: 'Price' }), el('dd', { text: `${rate(pr.price_per_gpu_hr)}/GPU-hr` }),
-        el('dt', { text: 'GPU-hours' }), el('dd', { text: num(pr.gpu_hours) }),
-        el('dt', { text: 'Total' }), el('dd', { text: usd(pr.total) }),
-        el('dt', { text: 'If not covered' }), el('dd', { text: usd(pr.cost_if_not_covered) }),
-        el('dt', { class: 'pc-save', text: 'Saves' }), el('dd', { class: 'pc-save', text: usd(pr.savings) })),
-      pr.reason ? el('p', { class: 'pc-reason', text: pr.reason }) : null,
-      el('div', { class: 'pc-actions' }, accept, decline), decided);
+    const actions = el('div', { class: 'pc-actions' }, accept, decline);
+    const detail = el('div', { class: 'pc-offer-detail' },
+      el('div', { class: 'pc-offer-math', text: `${rate(pr.price_per_gpu_hr)}/GPU-hr × ${num(pr.gpu_hours)} GPU-hours = ${usd(pr.total)}` }),
+      el('div', { class: 'pc-offer-math' }, `vs ${usd(pr.cost_if_not_covered)} if not covered, `, el('b', { class: 'pc-save', text: `saves ${usd(pr.savings)}` })));
+    const status = el('span', { class: 'pc-h', text: 'needs your approval' });
+    const offer = el('div', { class: 'pc-offer', title: pr.reason || null },
+      el('div', { class: 'pc-offer-top' },
+        el('span', { class: 'pc-offer-name', text: pr.provider_name }), status),
+      detail, actions, decided);
     body.append(offer);
 
     const decide = async (decision) => {
@@ -234,11 +235,13 @@ function mount({ container, getHall } = {}) {
         ? `Accepted. ${pr.provider_name} covers ${num(pr.gpu_hours)} GPU-hours for ${usd(pr.total)}.`
         : `Declined. We pay the SLA credit instead.`;
       offer.dataset.status = st;
+      status.textContent = st === 'accepted' ? 'Accepted' : 'Declined';
+      detail.hidden = true; actions.hidden = true;   // the decision line says it all; keeps the column short
       const entries = Array.isArray(res?.ledger) ? res.ledger : [{ id: pr.id, provider_name: pr.provider_name, total: pr.total, status: st }];
       ledgerWrap.hidden = false;
-      for (const e of entries) {
-        ledger.append(el('li', { text: `${e.id || pr.id}: ${e.provider_name || pr.provider_name}, ${usd(e.total ?? pr.total)}, ${e.status || st}` }));
-      }
+      ledger.replaceChildren(...entries.map((e) =>
+        el('li', { text: `${e.id || pr.id}: ${e.provider_name || pr.provider_name}, ${usd(e.total ?? pr.total)}, ${e.status || st}` })));
+      ledgerHead.textContent = `Ledger (${entries.length})`;
       if (st === 'accepted') await hallCall(getHall, 'setProviderState', [pr.provider_id, 'deal']);
       else setTimeout(() => hallCall(getHall, 'hideProviders', []), 1500);
     };
