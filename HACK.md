@@ -94,7 +94,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 | Assumption | Starting value | Why it's reasonable | Source |
 |---|---|---|---|
 | Hall size | 40 racks × 32 H100 = 1,280 GPUs | Typical scale for an AI hall row set | None (assumed) |
-| Price forecast | Starts at $3.04/hr H100, ±10% daily band | Current public H100 index; band reflects recent volatility | Price: [Silicon Data](https://www.silicondata.com/products/silicon-index); band: assumed |
+| Price forecast | Real H100 on-demand median $4.02/hr (Nov 2, 2026) + 8-week trend; 90% band from 26-week volatility | History is real; the daily forecast is our model | [GetDeploying dataset](https://getdeploying.com/gpu-price-trends) |
 | Hourly utilization | 85–98%, small dips | AI clusters run near full; dips at job boundaries | None (assumed) |
 | Risk growth while a task waits | +0.5–2%/day failure chance, by task | Deferred maintenance raises failure odds | None (assumed) |
 | Unplanned failure cost | 3× planned downtime + emergency premium | Unplanned outages run longer and cost more | None (assumed) |
@@ -121,13 +121,13 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 
 ## Tasks to check early (first 1–2 hours)
 - [ ] **Nemotron tool calling on build.nvidia.com:** pick the model, test a 3-tool loop, and check the rate limit (reported ~40 requests/min, unverified).
-- [ ] **Free price feed:** try [GetDeploying](https://getdeploying.com/gpu-price-trends) (weekly history, 103 GPUs), the Silicon Data public page and Ornn. If none works, keep the seeded curve.
+- [x] **Free price feed:** try [GetDeploying](https://getdeploying.com/gpu-price-trends) (weekly history, 103 GPUs), the Silicon Data public page and Ornn. If none works, keep the seeded curve.
 - [ ] **Optimizer:** greedy vs. OR-Tools (Nandhan decides; greedy is faster).
 - [ ] **Ask the NMC² booth:** what maintenance actually costs them, and how they schedule it now. Their answer can make a pitch line.
 
 ## Honesty (disclose in the demo)
 - The facility, telemetry, backlog, utilization and risk numbers are simulated or assumed (see Assumptions).
-- Prices are a seeded sample curve based on public index levels, **not a live feed**, unless the feed task above succeeds.
+- Prices: real weekly history from GetDeploying (H100 on-demand median across providers, $4.02/hr as of 2026-11-02, in `backend/data/gpu-prices/`). The daily forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
 - Don't claim NMC² uses this market, or that CME compute futures are trading.
 - Nemotron rehearsed requests: for the 3 scripted demo requests the parsed task is pinned to a pre-verified version (and used outright if Nemotron is offline/rate-limited). Unscripted requests use Nemotron's parse as-is.
 - Most of the optimized-vs-ASAP savings comes from the assumed hourly utilization dips (stubs.py), not from the daily price curve.
@@ -162,3 +162,4 @@ Sleep in shifts; someone is always building.
 - 21:45 hack-check: phase Harden (~11h to cutoff). Weakest: Presentation (no video/rehearsal; Devpost registration unconfirmed, due 23:00). Highest-leverage build fix: wire the disabled "Ask Nemotron" box to POST /request (journey step 4, NVIDIA track). Then: thermal-aware optimizer, /cost from stubs.slot_cost, utilization-vs-price savings story.
 - 21:50 Fawaz's lane redistributed (Loki: prices/cost model; Nandhan: thermal-aware planner + 3D). Task board added.
 - 22:xx Nandhan: thermal-aware optimizer. Every slot the optimizer takes is checked with `simulate_plan` on the whole plan; cheapest slot that keeps all zones under 32 C wins. ASAP stays unchecked (the baseline). Shortcut: non-cooling tasks only lower temps, so they skip per-slot sims; ~17 ms per plan. Seeded week unchanged: optimized $12,772.56 clean vs ASAP $13,248.58 with 5 overheats; fallback-plans.js still valid. 48 tests.
+- 23:xx Nandhan: real prices. Fawaz's GetDeploying CSVs (H100/H200/B200, weekly Nov 2025-Nov 2026) in backend/data/gpu-prices; app/market.py turns them into a daily forecast for the week of Mon Nov 9 (H100 $4.16 -> $4.28, rising ~0.5%/day). stubs.price() now uses it (Loki: cost model untouched). Seeded week: optimized $17,449 clean vs ASAP $18,101 (5 overheats); saved $652 (3.6%). Real week-to-week moves average 2.7%, so within one week price barely changes the schedule: savings still come from utilization + timing. fallback-plans.js regenerated via backend/scripts/make_fallback.py.

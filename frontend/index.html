@@ -130,7 +130,7 @@
     <section class="sec">
       <div class="sec-label"><span>H100 price forecast</span><span class="sec-aside">$/GPU-hr</span></div>
       <div class="price-chart" id="price-chart"></div>
-      <div class="caption">Seeded sample, not a live feed.</div>
+      <div class="caption">Forecast from real GetDeploying H100 prices (weekly, through Nov 2). Not a live feed.</div>
     </section>
 
     <section class="sec">
@@ -186,7 +186,7 @@
       </div>
       <p><span class="cloud-only">In <b>GPU cloud</b> mode, downtime is lost revenue and the SLA term adds credits owed on contracted hours.</span><span class="private-only">In <b>Private DC</b> mode, downtime is what it costs to rent replacement GPUs; there is no SLA term.</span></p>
       <p>The planner tries every allowed start for every task, never overlaps two jobs in one cooling zone, and keeps the cheapest schedule. The baseline starts each job at the first business-hours slot.</p>
-      <p class="honest"><b>Honesty note.</b> The facility, backlog, utilization and risk numbers are simulated or assumed. Prices are a seeded curve based on public H100 index levels ($3.04/hr), not a live feed.</p>
+      <p class="honest"><b>Honesty note.</b> The facility, backlog, utilization and risk numbers are simulated or assumed. Prices: the history is real (GetDeploying weekly H100 on-demand median across ~46 providers, $4.02/hr on Nov 2, 2026); the day-by-day forecast for the planning week is our own trend model. A snapshot, not a live feed.</p>
     </div>
   </details>
 

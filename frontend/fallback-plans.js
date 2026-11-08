@@ -1,6 +1,5 @@
 // AUTO-GENERATED snapshot of real backend responses, used only when the API is unreachable.
-// Regenerate: run the backend, then re-save GET /backlog, GET /prices?days=7 and POST /plan for
-// mode in {cloud, private} x strategy in {optimized, asap}.
+// Regenerate: cd backend && .venv/bin/python scripts/make_fallback.py
 export const FALLBACK = {
  "generated": "2026-11-07 (saved from the real backend: GET /backlog, GET /prices?days=7, POST /plan)",
  "backlog": [
@@ -161,52 +160,73 @@ export const FALLBACK = {
  "prices": [
   {
    "day": 0,
+   "date": "2026-11-09",
    "gpu": "H100",
-   "price": 3.04,
-   "low": 2.736,
-   "high": 3.344
+   "price": 4.161,
+   "low": 3.8989,
+   "high": 4.4406,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   },
   {
    "day": 1,
+   "date": "2026-11-10",
    "gpu": "H100",
-   "price": 3.11,
-   "low": 2.799,
-   "high": 3.421
+   "price": 4.1808,
+   "low": 3.8999,
+   "high": 4.4818,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   },
   {
    "day": 2,
+   "date": "2026-11-11",
    "gpu": "H100",
-   "price": 3.22,
-   "low": 2.898,
-   "high": 3.542
+   "price": 4.2005,
+   "low": 3.9019,
+   "high": 4.5221,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   },
   {
    "day": 3,
+   "date": "2026-11-12",
    "gpu": "H100",
-   "price": 3.15,
-   "low": 2.835,
-   "high": 3.465
+   "price": 4.2203,
+   "low": 3.9047,
+   "high": 4.5615,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   },
   {
    "day": 4,
+   "date": "2026-11-13",
    "gpu": "H100",
-   "price": 2.93,
-   "low": 2.637,
-   "high": 3.223
+   "price": 4.2401,
+   "low": 3.9081,
+   "high": 4.6003,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   },
   {
    "day": 5,
+   "date": "2026-11-14",
    "gpu": "H100",
-   "price": 2.78,
-   "low": 2.502,
-   "high": 3.058
+   "price": 4.2599,
+   "low": 3.9121,
+   "high": 4.6386,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   },
   {
    "day": 6,
+   "date": "2026-11-15",
    "gpu": "H100",
-   "price": 2.84,
-   "low": 2.556,
-   "high": 3.124
+   "price": 4.2797,
+   "low": 3.9166,
+   "high": 4.6763,
+   "source": "GetDeploying GPU price dataset (weekly, ON_DEMAND median across providers)",
+   "as_of": "2026-11-02"
   }
  ],
  "plans": {
@@ -214,7 +234,7 @@ export const FALLBACK = {
    "optimized": {
     "mode": "cloud",
     "strategy": "optimized",
-    "total_cost": 12772.56,
+    "total_cost": 17449.11,
     "items": [
      {
       "task_id": "T5",
@@ -225,10 +245,10 @@ export const FALLBACK = {
       "start_label": "Mon 03:00",
       "end_label": "Mon 08:00",
       "gpus_offline": 160,
-      "downtime_cost": 2130.92,
-      "sla_cost": 149.16,
-      "risk_cost": 8.55,
-      "total": 2288.64
+      "downtime_cost": 2916.69,
+      "sla_cost": 204.17,
+      "risk_cost": 11.99,
+      "total": 3132.86
      },
      {
       "task_id": "T2",
@@ -239,10 +259,10 @@ export const FALLBACK = {
       "start_label": "Mon 04:00",
       "end_label": "Mon 08:00",
       "gpus_offline": 160,
-      "downtime_cost": 1684.4,
-      "sla_cost": 117.91,
-      "risk_cost": 11.41,
-      "total": 1813.72
+      "downtime_cost": 2305.53,
+      "sla_cost": 161.39,
+      "risk_cost": 15.99,
+      "total": 2482.91
      },
      {
       "task_id": "T3",
@@ -253,10 +273,10 @@ export const FALLBACK = {
       "start_label": "Mon 04:00",
       "end_label": "Mon 07:00",
       "gpus_offline": 256,
-      "downtime_cost": 2022.65,
-      "sla_cost": 141.59,
-      "risk_cost": 6.84,
-      "total": 2171.07
+      "downtime_cost": 2768.5,
+      "sla_cost": 193.79,
+      "risk_cost": 9.6,
+      "total": 2971.89
      },
      {
       "task_id": "T6",
@@ -267,10 +287,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 13:00",
       "gpus_offline": 128,
-      "downtime_cost": 1424.57,
-      "sla_cost": 99.72,
-      "risk_cost": 24.64,
-      "total": 1548.92
+      "downtime_cost": 1949.88,
+      "sla_cost": 136.49,
+      "risk_cost": 34.54,
+      "total": 2120.91
      },
      {
       "task_id": "T1",
@@ -281,10 +301,10 @@ export const FALLBACK = {
       "start_label": "Mon 18:00",
       "end_label": "Tue 00:00",
       "gpus_offline": 160,
-      "downtime_cost": 2614.89,
-      "sla_cost": 183.04,
-      "risk_cost": 115.48,
-      "total": 2913.41
+      "downtime_cost": 3579.13,
+      "sla_cost": 250.54,
+      "risk_cost": 161.92,
+      "total": 3991.58
      },
      {
       "task_id": "T4",
@@ -295,10 +315,10 @@ export const FALLBACK = {
       "start_label": "Tue 09:00",
       "end_label": "Tue 11:00",
       "gpus_offline": 320,
-      "downtime_cost": 1727.67,
-      "sla_cost": 120.94,
-      "risk_cost": 188.19,
-      "total": 2036.8
+      "downtime_cost": 2322.52,
+      "sla_cost": 162.58,
+      "risk_cost": 263.87,
+      "total": 2748.96
      }
     ],
     "unscheduled": []
@@ -306,7 +326,7 @@ export const FALLBACK = {
    "asap": {
     "mode": "cloud",
     "strategy": "asap",
-    "total_cost": 13248.58,
+    "total_cost": 18100.63,
     "items": [
      {
       "task_id": "T1",
@@ -317,10 +337,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 15:00",
       "gpus_offline": 160,
-      "downtime_cost": 2689.31,
-      "sla_cost": 188.25,
-      "risk_cost": 57.74,
-      "total": 2935.3
+      "downtime_cost": 3680.99,
+      "sla_cost": 257.67,
+      "risk_cost": 80.96,
+      "total": 4019.62
      },
      {
       "task_id": "T3",
@@ -331,10 +351,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 12:00",
       "gpus_offline": 256,
-      "downtime_cost": 2147.16,
-      "sla_cost": 150.3,
-      "risk_cost": 15.4,
-      "total": 2312.86
+      "downtime_cost": 2938.93,
+      "sla_cost": 205.73,
+      "risk_cost": 21.59,
+      "total": 3166.25
      },
      {
       "task_id": "T5",
@@ -345,10 +365,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 14:00",
       "gpus_offline": 160,
-      "downtime_cost": 2226.25,
-      "sla_cost": 155.84,
-      "risk_cost": 25.66,
-      "total": 2407.75
+      "downtime_cost": 3047.18,
+      "sla_cost": 213.3,
+      "risk_cost": 35.98,
+      "total": 3296.47
      },
      {
       "task_id": "T6",
@@ -359,10 +379,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 13:00",
       "gpus_offline": 128,
-      "downtime_cost": 1424.57,
-      "sla_cost": 99.72,
-      "risk_cost": 24.64,
-      "total": 1548.92
+      "downtime_cost": 1949.88,
+      "sla_cost": 136.49,
+      "risk_cost": 34.54,
+      "total": 2120.91
      },
      {
       "task_id": "T2",
@@ -373,10 +393,10 @@ export const FALLBACK = {
       "start_label": "Mon 15:00",
       "end_label": "Mon 19:00",
       "gpus_offline": 160,
-      "downtime_cost": 1835.67,
-      "sla_cost": 128.5,
-      "risk_cost": 42.77,
-      "total": 2006.94
+      "downtime_cost": 2512.58,
+      "sla_cost": 175.88,
+      "risk_cost": 59.97,
+      "total": 2748.43
      },
      {
       "task_id": "T4",
@@ -387,10 +407,10 @@ export const FALLBACK = {
       "start_label": "Tue 09:00",
       "end_label": "Tue 11:00",
       "gpus_offline": 320,
-      "downtime_cost": 1727.67,
-      "sla_cost": 120.94,
-      "risk_cost": 188.19,
-      "total": 2036.8
+      "downtime_cost": 2322.52,
+      "sla_cost": 162.58,
+      "risk_cost": 263.87,
+      "total": 2748.96
      }
     ],
     "unscheduled": []
@@ -400,7 +420,7 @@ export const FALLBACK = {
    "optimized": {
     "mode": "private",
     "strategy": "optimized",
-    "total_cost": 11936.97,
+    "total_cost": 16307.58,
     "items": [
      {
       "task_id": "T5",
@@ -411,10 +431,10 @@ export const FALLBACK = {
       "start_label": "Mon 03:00",
       "end_label": "Mon 08:00",
       "gpus_offline": 160,
-      "downtime_cost": 2130.92,
+      "downtime_cost": 2916.69,
       "sla_cost": 0.0,
-      "risk_cost": 7.99,
-      "total": 2138.91
+      "risk_cost": 11.21,
+      "total": 2927.9
      },
      {
       "task_id": "T2",
@@ -425,10 +445,10 @@ export const FALLBACK = {
       "start_label": "Mon 04:00",
       "end_label": "Mon 08:00",
       "gpus_offline": 160,
-      "downtime_cost": 1684.4,
+      "downtime_cost": 2305.53,
       "sla_cost": 0.0,
-      "risk_cost": 10.66,
-      "total": 1695.06
+      "risk_cost": 14.95,
+      "total": 2320.47
      },
      {
       "task_id": "T3",
@@ -439,10 +459,10 @@ export const FALLBACK = {
       "start_label": "Mon 04:00",
       "end_label": "Mon 07:00",
       "gpus_offline": 256,
-      "downtime_cost": 2022.65,
+      "downtime_cost": 2768.5,
       "sla_cost": 0.0,
-      "risk_cost": 6.4,
-      "total": 2029.04
+      "risk_cost": 8.97,
+      "total": 2777.46
      },
      {
       "task_id": "T6",
@@ -453,10 +473,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 13:00",
       "gpus_offline": 128,
-      "downtime_cost": 1424.57,
+      "downtime_cost": 1949.88,
       "sla_cost": 0.0,
-      "risk_cost": 23.02,
-      "total": 1447.59
+      "risk_cost": 32.28,
+      "total": 1982.16
      },
      {
       "task_id": "T1",
@@ -467,10 +487,10 @@ export const FALLBACK = {
       "start_label": "Mon 18:00",
       "end_label": "Tue 00:00",
       "gpus_offline": 160,
-      "downtime_cost": 2614.89,
+      "downtime_cost": 3579.13,
       "sla_cost": 0.0,
-      "risk_cost": 107.93,
-      "total": 2722.81
+      "risk_cost": 151.33,
+      "total": 3730.45
      },
      {
       "task_id": "T4",
@@ -481,10 +501,10 @@ export const FALLBACK = {
       "start_label": "Tue 09:00",
       "end_label": "Tue 11:00",
       "gpus_offline": 320,
-      "downtime_cost": 1727.67,
+      "downtime_cost": 2322.52,
       "sla_cost": 0.0,
-      "risk_cost": 175.88,
-      "total": 1903.55
+      "risk_cost": 246.6,
+      "total": 2569.12
      }
     ],
     "unscheduled": []
@@ -492,7 +512,7 @@ export const FALLBACK = {
    "asap": {
     "mode": "private",
     "strategy": "asap",
-    "total_cost": 12381.85,
+    "total_cost": 16916.48,
     "items": [
      {
       "task_id": "T1",
@@ -503,10 +523,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 15:00",
       "gpus_offline": 160,
-      "downtime_cost": 2689.31,
+      "downtime_cost": 3680.99,
       "sla_cost": 0.0,
-      "risk_cost": 53.96,
-      "total": 2743.27
+      "risk_cost": 75.66,
+      "total": 3756.65
      },
      {
       "task_id": "T3",
@@ -517,10 +537,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 12:00",
       "gpus_offline": 256,
-      "downtime_cost": 2147.16,
+      "downtime_cost": 2938.93,
       "sla_cost": 0.0,
-      "risk_cost": 14.39,
-      "total": 2161.55
+      "risk_cost": 20.18,
+      "total": 2959.11
      },
      {
       "task_id": "T5",
@@ -531,10 +551,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 14:00",
       "gpus_offline": 160,
-      "downtime_cost": 2226.25,
+      "downtime_cost": 3047.18,
       "sla_cost": 0.0,
-      "risk_cost": 23.98,
-      "total": 2250.24
+      "risk_cost": 33.63,
+      "total": 3080.81
      },
      {
       "task_id": "T6",
@@ -545,10 +565,10 @@ export const FALLBACK = {
       "start_label": "Mon 09:00",
       "end_label": "Mon 13:00",
       "gpus_offline": 128,
-      "downtime_cost": 1424.57,
+      "downtime_cost": 1949.88,
       "sla_cost": 0.0,
-      "risk_cost": 23.02,
-      "total": 1447.59
+      "risk_cost": 32.28,
+      "total": 1982.16
      },
      {
       "task_id": "T2",
@@ -559,10 +579,10 @@ export const FALLBACK = {
       "start_label": "Mon 15:00",
       "end_label": "Mon 19:00",
       "gpus_offline": 160,
-      "downtime_cost": 1835.67,
+      "downtime_cost": 2512.58,
       "sla_cost": 0.0,
-      "risk_cost": 39.97,
-      "total": 1875.65
+      "risk_cost": 56.05,
+      "total": 2568.62
      },
      {
       "task_id": "T4",
@@ -573,10 +593,10 @@ export const FALLBACK = {
       "start_label": "Tue 09:00",
       "end_label": "Tue 11:00",
       "gpus_offline": 320,
-      "downtime_cost": 1727.67,
+      "downtime_cost": 2322.52,
       "sla_cost": 0.0,
-      "risk_cost": 175.88,
-      "total": 1903.55
+      "risk_cost": 246.6,
+      "total": 2569.12
      }
     ],
     "unscheduled": []

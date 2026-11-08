@@ -3,7 +3,8 @@
 - prices, utilization, cost  -> replace with Fawaz's price curve + cost model (/prices, /cost)
 - seeded_backlog             -> returns Loki's backlog (app/backlog.py)
 
-Every number here is ASSUMED or SEEDED (see HACK.md "Assumptions"), not real data.
+Prices come from real market data (app/market.py). Every other number here is ASSUMED
+or SEEDED (see HACK.md "Assumptions"), not real data.
 The planner only depends on `slot_cost(task, start_hour, mode)` and the Task model,
 so swapping these out should not require planner changes.
 """
@@ -11,6 +12,7 @@ so swapping these out should not require planner changes.
 import random
 from dataclasses import dataclass
 
+from . import market
 from .models import HOURS_IN_WEEK, Mode, Task
 
 # ---- Assumptions (HACK.md) -------------------------------------------------
@@ -20,10 +22,11 @@ SLA_CREDIT_RATE = 0.10  # credit owed on missed contracted hours
 UNPLANNED_MULTIPLIER = 3.0  # unplanned failure = 3x planned downtime...
 EMERGENCY_PREMIUM = 0.20  # ...plus 20% emergency premium
 
-# Seeded daily H100 $/GPU-hr, starting at the Silicon Data public index level ($3.04).
-# NOT a live feed. Shape is invented: midweek pricier, weekend cheaper.
-DAILY_PRICE = [3.04, 3.11, 3.22, 3.15, 2.93, 2.78, 2.84]
-PRICE_BAND = 0.10  # +/-10% forecast band
+# Daily H100 $/GPU-hr for the planning week: forecast from REAL weekly market data
+# (GetDeploying, ON_DEMAND median across providers; see app/market.py). The history is
+# real; the day-by-day forecast on top of it is our model. A snapshot, not a live feed.
+FORECAST = market.daily_forecast("h100", 7)
+DAILY_PRICE = [f["price"] for f in FORECAST]
 
 
 def price(day: int) -> float:
@@ -31,15 +34,10 @@ def price(day: int) -> float:
 
 
 def prices(days: int = 7) -> list[dict]:
+    note = market.source_note("h100")
     return [
-        {
-            "day": d,
-            "gpu": "H100",
-            "price": DAILY_PRICE[d],
-            "low": round(DAILY_PRICE[d] * (1 - PRICE_BAND), 3),
-            "high": round(DAILY_PRICE[d] * (1 + PRICE_BAND), 3),
-        }
-        for d in range(min(days, len(DAILY_PRICE)))
+        {**f, "source": note["source"], "as_of": note["as_of"]}
+        for f in FORECAST[: max(0, min(days, len(FORECAST)))]
     ]
 
 
