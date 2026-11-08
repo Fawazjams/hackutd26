@@ -1,0 +1,18 @@
+# local notes, not part of the project
+hackutd pregame.pdf
+prototype/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# node
+node_modules/
+dist/
+
+# os
+.DS_Store
+Thumbs.db
