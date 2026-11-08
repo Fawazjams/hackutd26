@@ -27,7 +27,7 @@ const S = {
   selected: null,          // selected backlog task id
   flash: null,             // { racks:Set, start }
   summaryDismissed: false,
-  view: { pixelArt: true, pixelSize: 3, outlines: true, palette: true },
+  view: { pixelArt: false, pixelSize: 3, outlines: true, palette: false },
   loadToken: 0,
 };
 

@@ -166,12 +166,12 @@ export async function createDataCenter(containerEl) {
 
   // ---- render targets for the pixel pass
   const post = {
-    pixelArt: true, pixelSize: 3, outlines: true, palette: true,
+    pixelArt: false, pixelSize: 3, outlines: true, palette: false,
     rt: null,
     material: new THREE.ShaderMaterial({
       uniforms: {
         tColor: { value: null }, tDepth: { value: null }, texel: { value: new THREE.Vector2() },
-        outlines: { value: 1 }, palette: { value: 1 }, inkColor: { value: new THREE.Color(0x2a2522) },
+        outlines: { value: 1 }, palette: { value: 0 }, inkColor: { value: new THREE.Color(0x2a2522) },
       },
       vertexShader: POST_VERT, fragmentShader: POST_FRAG, transparent: true, depthTest: false, depthWrite: false,
     }),
@@ -266,18 +266,23 @@ export async function createDataCenter(containerEl) {
   function rebuildRT() {
     post.rt?.dispose();
     post.rt?.depthTexture?.dispose();
-    const ps = post.pixelSize;
-    const rw = Math.max(1, Math.floor(w / ps)), rh = Math.max(1, Math.floor(h / ps));
-    const rt = new THREE.WebGLRenderTarget(rw, rh, {
-      minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false,
-    });
+    // Pixel art: render at 1/pixelSize and upscale with nearest filtering (chunky pixels).
+    // Crisp: render at screen resolution (supersampled 1.5x on non-retina screens) and
+    // downsample with linear filtering, so edges are smooth and outlines stay ~1 CSS px.
+    const pr = renderer.getPixelRatio();
+    const scale = post.pixelArt ? 1 / post.pixelSize : pr * (pr >= 2 ? 1 : 1.5);
+    const rw = Math.max(1, Math.min(4096, Math.floor(w * scale)));
+    const rh = Math.max(1, Math.min(4096, Math.floor(h * scale)));
+    const filter = post.pixelArt ? THREE.NearestFilter : THREE.LinearFilter;
+    const rt = new THREE.WebGLRenderTarget(rw, rh, { minFilter: filter, magFilter: filter, generateMipmaps: false });
     rt.texture.colorSpace = THREE.LinearSRGBColorSpace;
     rt.depthTexture = new THREE.DepthTexture(rw, rh);
     rt.depthTexture.type = THREE.UnsignedIntType;
     post.rt = rt;
     post.material.uniforms.tColor.value = rt.texture;
     post.material.uniforms.tDepth.value = rt.depthTexture;
-    post.material.uniforms.texel.value.set(1 / rw, 1 / rh);
+    const line = post.pixelArt ? 1 : Math.max(1, Math.round(scale * 0.75)); // outline width in RT pixels
+    post.material.uniforms.texel.value.set(line / rw, line / rh);
   }
   const ro = new ResizeObserver(resize);
   ro.observe(containerEl);
@@ -339,19 +344,14 @@ export async function createDataCenter(containerEl) {
     for (const f of anim) f(animT, state.paused ? 0 : dt, state);
     hall.tick(animT, now / 1000, state);
 
-    if (post.pixelArt) {
-      renderer.setRenderTarget(post.rt);
-      renderer.setClearColor(0x000000, 0);
-      renderer.clear();
-      renderer.render(scene, camera);
-      renderer.setRenderTarget(null);
-      renderer.clear();
-      renderer.render(postScene, postCam);
-    } else {
-      renderer.setRenderTarget(null);
-      renderer.clear();
-      renderer.render(scene, camera);
-    }
+    // both styles go through the post pass (outlines, optional palette)
+    renderer.setRenderTarget(post.rt);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.clear();
+    renderer.render(postScene, postCam);
   }
   updateLighting();
   raf = requestAnimationFrame(frame);
@@ -434,12 +434,12 @@ export async function createDataCenter(containerEl) {
       updateLighting();
     },
     setView(v = {}) {
-      if ('pixelArt' in v) post.pixelArt = !!v.pixelArt;
+      if ('pixelArt' in v && !!v.pixelArt !== post.pixelArt) { post.pixelArt = !!v.pixelArt; rebuildRT(); }
       if ('outlines' in v) post.material.uniforms.outlines.value = v.outlines ? 1 : 0;
       if ('palette' in v) post.material.uniforms.palette.value = v.palette ? 1 : 0;
       if ('pixelSize' in v) {
         const ps = Math.max(1, Math.min(6, Math.round(Number(v.pixelSize) || 3)));
-        if (ps !== post.pixelSize) { post.pixelSize = ps; rebuildRT(); }
+        if (ps !== post.pixelSize) { post.pixelSize = ps; if (post.pixelArt) rebuildRT(); }
       }
     },
     rotate(dir) { cam.azTarget += (dir < 0 ? -1 : 1) * Math.PI / 2; },
