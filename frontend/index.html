@@ -82,6 +82,21 @@
     <ol id="ticker-list"></ol>
   </section>
 
+  <!-- Top-center of the stage: what Nemotron is doing right now (driven by 'agent:step') -->
+  <div class="agent-callout" id="agent-callout" hidden role="status" aria-live="polite">
+    <div class="ac-head"><span class="ac-dot" aria-hidden="true"></span><span class="ac-title" id="ac-title"></span><span class="ac-secs" id="ac-secs"></span></div>
+    <div class="ac-text" id="ac-text"></div>
+  </div>
+
+  <!-- Top-center of the stage: the job Nemotron just added, after the plan lands -->
+  <section class="newjob" id="newjob" hidden aria-label="New job from Nemotron">
+    <div class="nj-head"><span>New job from Nemotron</span><button class="nj-x" id="nj-close" aria-label="Close">×</button></div>
+    <div class="nj-l1"><b class="nj-name" id="nj-name"></b><i class="zone" id="nj-zone"></i><span class="nj-cost" id="nj-cost"></span></div>
+    <div class="nj-l2"><span class="nj-slot" id="nj-slot"></span><span id="nj-racks"></span></div>
+    <div class="nj-asap" id="nj-asap"></div>
+    <div class="nj-foot"><span class="nj-status" id="nj-status"></span><button class="nj-replay" id="nj-replay">Replay the week</button></div>
+  </section>
+
   <!-- Bottom-left: key hints -->
   <footer class="keys" aria-label="Keyboard shortcuts">
     <span><kbd>Click</kbd> a rack to inspect</span>

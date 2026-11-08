@@ -3,7 +3,7 @@
 // the $-lost counters for our plan vs ASAP. Every number on screen is computed from API data.
 
 import { loadAll, planWithTasks } from './ui/api.js';
-import { initAgentPanel } from './ui/agent-panel.js';
+import { initAgentPanel, rackSpan, windowsText } from './ui/agent-panel.js';
 import { HOURS, DAYS, hourLabel, money, num, pct, esc, shortName } from './ui/format.js';
 import { createPriceChart, createGantt } from './ui/charts.js';
 import { createPlaceholderHall } from './ui/placeholder-hall.js';
@@ -15,6 +15,12 @@ const MAX_HOURS_PER_SEC = 48;
 const EXTRA_EQUIPMENT = ['UPS-B']; // in the hall but not in the seeded backlog
 const ZONE_VAR = { Z1: 'var(--z1)', Z2: 'var(--z2)', Z3: 'var(--z3)', Z4: 'var(--z4)' };
 const PLAN_LABEL = { optimized: 'Our plan', asap: 'ASAP' };
+const LEAD_HOURS = 2;            // after an agent run, land the clock this long before the new job
+const FOCUS_RATE = 1 / 3;        // play the new job at a third of the speed so the racks visibly change...
+const FOCUS_MAX_SECS = 6;        // ...but never take longer than this for a long job
+const PENDING_BLINK_MS = 650;    // racks the agent is working on blink calmly until the plan lands
+const STEP_DWELL_MS = 1100;      // each tool step stays on screen at least this long (steps can land together)
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 const S = {
   mode: 'cloud',
@@ -26,6 +32,9 @@ const S = {
   d: null,                 // prepared data for the current mode
   selected: null,          // selected backlog task id
   flash: null,             // { racks:Set, start }
+  agent: null,             // live Nemotron run: { racks:Set, zone, equipment, task, wasPlaying, ... }
+  focus: null,             // job the agent just added: { id, start, end } (no fast-forward near it)
+  slowed: false,
   summaryDismissed: false,
   view: { pixelArt: false, pixelSize: 3, outlines: true, palette: false },
   loadToken: 0,
@@ -154,13 +163,14 @@ async function loadMode(mode) {
   $('sb-mode').textContent = mode === 'cloud' ? 'GPU cloud: lost revenue and SLA credits' : 'Private hall: cost to rent replacements';
   const raw = await loadAll(mode);
   if (token !== S.loadToken) return;
+  closeNewJob();
   applyRaw(raw);
   if (BOOT.t) { S.t = Math.min(HOURS, BOOT.t); BOOT.t = 0; }
   if (BOOT.paused) { setPlaying(false); BOOT.paused = false; }
 }
 
-// Render a {backlog, prices, plans, offline} bundle and restart the week.
-function applyRaw(raw) {
+// Render a {backlog, prices, plans, offline} bundle and restart the week (or jump to hour `at`).
+function applyRaw(raw, at = null) {
   S.raw = raw;
   S.d = prepare(raw);
   $('offline-chip').hidden = !raw.offline;
@@ -168,7 +178,12 @@ function applyRaw(raw) {
   priceChart = createPriceChart($('price-chart'), raw.prices);
   gantt = createGantt($('gantt'), S.d.plans, raw.backlog.map(t => t.id));
   gantt.select(S.selected);
-  restart();
+  if (at == null) restart();
+  else {
+    lastTickerKey = '';
+    seek(at);
+    setPlaying(true);
+  }
 }
 
 // Ask Nemotron panel (ui/agent-panel.js) sends the optimized plan incl. its new task.
@@ -178,7 +193,8 @@ function applyRaw(raw) {
 // can't sneak into ASAP and inflate the savings.
 async function onAgentPlan(e) {
   const { task, plan, asapPlan } = e.detail || {};
-  if (!task || !plan || !S.raw) return;
+  if (!task || !plan || !S.raw) { endAgentRun(true); return; }
+  await stepsShown();                       // let the last steps finish narrating first
   const mode = plan.mode || S.mode;
   const planned = new Set([...plan.items, ...(plan.unscheduled || [])].map(i => i.task_id));
   const backlog = [...S.raw.backlog.filter(t => t.id !== task.id && planned.has(t.id)), task];
@@ -188,10 +204,217 @@ async function onAgentPlan(e) {
     catch (err) { console.warn('[agent] ASAP re-plan failed, keeping previous ASAP plan:', err); }
   }
   S.selected = task.id;
-  applyRaw({ ...S.raw, backlog, plans: { optimized: plan, asap } });
+  // Land on the new job instead of rewinding to Monday: a couple of hours before it starts,
+  // our plan in the hall, 1x, so the racks visibly go into maintenance within seconds.
+  const item = plan.items.find(i => i.task_id === task.id);
+  endAgentRun(false);
+  setShow('optimized');
+  S.speed = 1; setSeg('seg-speed', '1');
+  S.focus = item ? { id: task.id, start: item.start_hour, end: item.end_hour } : null;
+  applyRaw({ ...S.raw, backlog, plans: { optimized: plan, asap } }, item ? Math.max(0, item.start_hour - LEAD_HOURS) : S.t);
+  call('highlightZone', task.zone);
+  showNewJob(task);
+}
+
+// ---------------------------------------------------------------- live agent run
+// ui/agent-panel.js streams the agent's steps as 'agent:step' events; the hall narrates them:
+// the racks it looked up blink, the clock moves to the slot it found, the plan lands at done.
+// Steps can arrive in the same second, so they play through a queue with a short dwell each.
+const stepQ = [];
+let stepBusy = false, stepIdle = [];
+function onAgentStep(e) {
+  const evt = e.detail || {};
+  if (evt.type === 'start') { stepQ.length = 0; }
+  stepQ.push(evt);
+  if (!stepBusy) pumpSteps();
+}
+async function pumpSteps() {
+  stepBusy = true;
+  while (stepQ.length) {
+    const evt = stepQ.shift();
+    playStep(evt);
+    // hold each tool step on screen; anything that arrives meanwhile waits its turn
+    if (evt.type === 'tool' && S.agent) await new Promise(r => setTimeout(r, STEP_DWELL_MS));
+  }
+  stepBusy = false;
+  stepIdle.splice(0).forEach(r => r());
+}
+const stepsShown = () => (stepBusy || stepQ.length ? new Promise(r => stepIdle.push(r)) : Promise.resolve());
+
+function playStep(evt) {
+  try {
+    if (evt.type === 'start') return agentStart(evt);
+    if (!S.agent) return;
+    if (evt.type === 'thinking') { S.agent.status = 'thinking'; tickCallout(); }
+    else if (evt.type === 'explaining') { S.agent.status = 'writing the explanation'; tickCallout(); }
+    else if (evt.type === 'tool') { S.agent.status = ''; agentTool(evt); }
+    else if (evt.type === 'done') {
+      // a plan arrives via 'agent:plan' (onAgentPlan); without one, put things back as they were
+      if (!evt.response?.task || !evt.response?.plan) endAgentRun(true);
+    } else if (evt.type === 'error') endAgentRun(true);
+  } catch (err) {
+    console.warn('[agent] step failed:', err);
+  }
+}
+
+function agentStart(evt) {
+  const wasPlaying = S.agent ? S.agent.wasPlaying : S.playing;
+  closeNewJob();
+  S.agent = { wasPlaying, racks: null, zone: null, equipment: null, task: null, replanned: false, status: 'thinking', t0: performance.now() };
+  setPlaying(false);
+  setShow('optimized');
+  if (S.t >= HOURS) S.summaryDismissed = true;
+  $('summary').hidden = true;
+  $('popover').hidden = true;
+  // evt.stream === false: older backend without live steps, so only start and done arrive
+  setCallout(evt.stream === false ? 'Nemotron is planning' : 'Nemotron is reading the request', evt.text ? `“${evt.text}”` : '');
+  clearInterval(calloutTimer);
+  calloutTimer = setInterval(tickCallout, 1000);
+}
+
+function agentTool(evt) {
+  const r = evt.result || {};
+  const a = S.agent;
+  const by = evt.by === 'code' ? 'Our code' : 'Nemotron';
+  const label = String(evt.label || evt.name || '');
+  if (r.error) { setCallout(`${by} got an error and is retrying`, String(r.error)); return; }
+  switch (evt.name) {
+    case 'lookup_equipment':
+      if (!r.zone) return;
+      a.zone = r.zone; a.equipment = r.equipment || null;
+      a.racks = new Set(r.racks || []);
+      call('highlightZone', r.zone);
+      setCallout(`${by} looked up the equipment`, `${r.equipment} is in zone ${r.zone}, racks ${rackSpan(r.racks)}`);
+      break;
+    case 'day_windows':
+      if (!Array.isArray(r.windows)) return;
+      gantt?.setWindows(r.windows);
+      setCallout(`${by} turned the request into time windows`, `Allowed: ${windowsText(r.windows)}`);
+      break;
+    case 'add_task':
+    case 'pinned_demo_task': {
+      const t = r.task;
+      if (!t) return;
+      a.task = t; a.zone = t.zone; a.equipment = t.equipment;
+      a.racks = new Set(t.racks_affected || []);
+      call('highlightZone', t.zone);
+      gantt?.setWindows(t.allowed_windows);
+      setCallout(evt.name === 'pinned_demo_task' ? 'Our code pinned the rehearsed job' : `${by} added the job`,
+        `${t.name}, ${t.duration_hrs} h, racks ${rackSpan(t.racks_affected)}`);
+      break;
+    }
+    case 'make_plan': {
+      if (r.strategy === 'asap' || /\[asap\]/.test(label)) {
+        setCallout(`${by} priced the do-it-now plan to compare`, `ASAP total for the week: ${money(r.total_cost)}`);
+        return;
+      }
+      const avoid = /avoid_violations/.test(label) || !!r.avoid_violations;
+      if (avoid) a.replanned = true;
+      const id = a.task?.id;
+      const slot = id && (r.schedule || []).find(x => x.task_id === id);
+      const un = id && (r.unscheduled || []).find(x => x.task_id === id);
+      if (slot) {
+        a.slot = slot;
+        setCallout(avoid ? `${by} re-planned around the problem` : `${by} ran the optimizer`,
+          `Cheapest safe slot: ${slot.start} to ${slot.end}, ${money(slot.cost)}`);
+        seek(Math.max(0, slot.start_hour - LEAD_HOURS));   // the clock jumps to just before it
+      } else if (un) {
+        setCallout(`${by} ran the optimizer`, `No slot fits: ${un.reason}`);
+      } else {
+        setCallout(`${by} ran the optimizer`, `Week total: ${money(r.total_cost)}`);
+      }
+      break;
+    }
+    case 'simulate': {
+      const n = Number(r.violations) || 0;
+      const first = r.first?.[0];
+      setCallout(`${by} checked the hall`, n === 0 ? 'Hall check: no overheats or zone conflicts'
+        : `Hall check: ${n} ${n === 1 ? 'problem' : 'problems'} found${first ? ` (${first.detail})` : ''}${a.replanned ? '' : ', re-planning'}`);
+      break;
+    }
+    case 'get_backlog': setCallout(`${by} read the backlog`, r.count != null ? `${r.count} jobs already planned` : ''); break;
+    case 'get_prices': setCallout(`${by} read the GPU price forecast`, r.count != null ? `${r.count} days of prices` : ''); break;
+    case 'llm_error': setCallout('Nemotron is unavailable', 'Using the rehearsed job instead'); break;
+    default: setCallout(`${by} ran ${evt.name}`);
+  }
+}
+
+/** The run is over. `restore`: no plan came back, so undo the pause and the gantt shading. */
+function endAgentRun(restore) {
+  const a = S.agent;
+  S.agent = null;
+  clearInterval(calloutTimer);
+  $('agent-callout').hidden = true;
+  if (!a) return;
+  if (restore) {
+    gantt?.setWindows(null);
+    const task = S.selected && S.d ? S.d.tasks.get(S.selected) : null;
+    call('highlightZone', task ? task.zone : null);
+    if (a.wasPlaying) setPlaying(true);
+  }
+}
+
+let calloutTimer = 0;
+function setCallout(title, text = null) {
+  $('ac-title').textContent = title;
+  if (text !== null) $('ac-text').textContent = text;
+  $('ac-text').hidden = !$('ac-text').textContent;
+  $('agent-callout').hidden = false;
+  tickCallout();
+}
+function tickCallout() {
+  if (!S.agent) return;
+  const secs = `${Math.round((performance.now() - S.agent.t0) / 1000)} s`;
+  $('ac-secs').textContent = S.agent.status ? `${S.agent.status}… ${secs}` : secs;
+}
+
+// Persistent card for the job the agent just added. Every value comes from the response.
+function showNewJob(task) {
+  const { optimized: o, asap: a } = S.d.plans;
+  const it = o.byTask.get(task.id);
+  const asapIt = a.byTask.get(task.id);
+  const un = o.unscheduled.find(u => u.task_id === task.id);
+  $('nj-name').textContent = task.name;
+  $('nj-zone').textContent = task.zone;
+  $('nj-zone').style.setProperty('--zc', ZONE_VAR[task.zone] || 'var(--ink-3)');
+  $('nj-slot').textContent = it ? `${it.start_label} to ${it.end_label}` : `Not scheduled: ${un ? un.reason : 'no slot fits'}`;
+  $('nj-racks').textContent = `Racks ${rackSpan(task.racks_affected)}, ${task.duration_hrs} h`;
+  $('nj-cost').textContent = it ? money(it.total) : '';
+  const asapUn = a.unscheduled.find(u => u.task_id === task.id);
+  $('nj-asap').textContent = asapIt && it && asapIt.start_hour !== it.start_hour
+    ? `ASAP would start ${asapIt.start_label}, ${money(asapIt.total)}`
+    : !asapIt && asapUn ? `ASAP could not fit it: ${asapUn.reason}` : '';
+  $('nj-asap').hidden = !$('nj-asap').textContent;
+  gantt?.setWindows(task.allowed_windows);
+  lastNewJobState = '';
+  $('newjob').hidden = false;
+  updateNewJob();
+}
+function closeNewJob() {
+  S.focus = null;
+  $('newjob').hidden = true;
+  gantt?.setWindows(null);
+}
+let lastNewJobState = '';
+function updateNewJob() {
+  if ($('newjob').hidden || !S.d) return;
+  const id = S.focus?.id;
+  const it = id ? S.d.plans.optimized.byTask.get(id) : null;
+  const st = !it ? 'none' : S.t < it.start_hour ? 'wait' : S.t < it.end_hour ? 'live' : 'done';
+  if (st === lastNewJobState) return;
+  lastNewJobState = st;
+  const racks = it ? rackSpan(it.racks) : '';
+  $('nj-status').textContent = {
+    none: 'Not in our plan this week.',
+    wait: `Watch racks ${racks}: work starts ${it?.start_label}.`,
+    live: `Running now: racks ${racks} are in maintenance.`,
+    done: `Finished ${it?.end_label}. Racks ${racks} are back online.`,
+  }[st];
+  $('newjob').dataset.state = st;
 }
 
 function restart() {
+  lastNewJobState = '';
   S.t = 0;
   S.summaryDismissed = false;
   lastTickerKey = '';
@@ -211,6 +434,7 @@ function buildLadder() {
     li.tabIndex = 0;
     li.dataset.id = task.id;
     li.style.setProperty('--zc', ZONE_VAR[task.zone] || 'var(--ink-3)');
+    li.classList.toggle('selected', task.id === S.selected);
     const same = o && a && o.start_hour === a.start_hour;
     const when = same
       ? `<span class="eq">${esc(o.start_label)}, same in both</span>`
@@ -282,11 +506,17 @@ function applyHall(now) {
       for (const r of S.flash.racks) want.set(r, want.get(r) === 'maintenance' ? 'offline' : 'maintenance');
     }
   }
+  // racks a live agent run is working on: calm blink (steady when motion is reduced)
+  if (S.agent?.racks?.size) {
+    const pend = reduceMotion.matches || Math.floor((now - S.agent.t0) / PENDING_BLINK_MS) % 2 === 0 ? 'offline' : 'maintenance';
+    for (const r of S.agent.racks) if (want.has(r)) want.set(r, pend);
+  }
   for (const [id, st] of want) {
     if (rackCache.get(id) !== st) { rackCache.set(id, st); call('setRackState', id, st); }
   }
   const busyEq = new Set(act.map(i => i.equipment).filter(Boolean));
-  for (const eq of S.d.equipment) {
+  if (S.agent?.equipment) busyEq.add(S.agent.equipment);
+  for (const eq of new Set([...S.d.equipment, ...equipCache.keys(), ...busyEq])) {
     const st = busyEq.has(eq) ? 'maintenance' : 'normal';
     if (equipCache.get(eq) !== st) { equipCache.set(eq, st); call('setEquipmentState', eq, st); }
   }
@@ -323,7 +553,8 @@ function updateScoreboard() {
     row.classList.toggle('shown', S.show === key);
   }
   for (const [key, suffix] of [['optimized', 'ours'], ['asap', 'asap']]) {
-    const n = plans[key].overheats.filter(o => o.hour < S.t).length;
+    // same rule as the ticker: an overheat counts from the start of its hour (hour <= t)
+    const n = plans[key].overheats.filter(o => o.hour <= S.t).length;
     const w = $(`sb-heatw-${suffix}`);
     if (w.dataset.n !== String(n)) {
       w.dataset.n = String(n);
@@ -335,6 +566,7 @@ function updateScoreboard() {
   const status = S.t >= HOURS ? 'Final'
     : !S.playing ? 'Paused'
     : S.boosting ? 'Skipping quiet hours'
+    : S.slowed ? 'Slowed down for the new job'
     : `Playing at ${S.speed}×, day ${Math.min(7, Math.floor(S.t / 24) + 1)} of 7`;
   setText('sb-status', status);
   $('sb-status').classList.toggle('ff', S.boosting && S.playing && S.t < HOURS);
@@ -499,6 +731,8 @@ function wireControls() {
   $('summary-close').addEventListener('click', () => { $('summary').hidden = true; S.summaryDismissed = true; });
   $('summary').addEventListener('click', (e) => { if (e.target === $('summary')) { $('summary').hidden = true; S.summaryDismissed = true; } });
   $('summary-replay').addEventListener('click', restart);
+  $('nj-replay').addEventListener('click', restart);
+  $('nj-close').addEventListener('click', closeNewJob);
   $('summary-swap').addEventListener('click', () => setMode(S.mode === 'cloud' ? 'private' : 'cloud'));
   $('panel-toggle').addEventListener('click', () => {
     const open = document.body.classList.toggle('panel-open');
@@ -544,8 +778,13 @@ function frame(now) {
   if (S.d) {
     if (S.playing && S.t >= HOURS) setPlaying(false);
     else if (S.playing) {
-      S.boosting = isQuiet(S.t);
-      const rate = Math.min(MAX_HOURS_PER_SEC, (S.speed / SEC_PER_HOUR) * (S.boosting ? QUIET_BOOST : 1));
+      // never fast-forward through the lead-in to the job the agent just added; play it slower
+      const f = S.focus;
+      const nearFocus = f && S.t >= f.start - LEAD_HOURS - 1 && S.t < f.end;
+      S.boosting = !nearFocus && isQuiet(S.t);
+      S.slowed = !!(f && S.t >= f.start && S.t < f.end);
+      let rate = Math.min(MAX_HOURS_PER_SEC, (S.speed / SEC_PER_HOUR) * (S.boosting ? QUIET_BOOST : 1));
+      if (S.slowed) rate = Math.min(rate, Math.max(rate * FOCUS_RATE, (f.end - f.start) / FOCUS_MAX_SECS));
       S.t = Math.min(HOURS, S.t + dt * rate);
       if (S.t >= HOURS) setPlaying(false);
     }
@@ -563,6 +802,7 @@ function render(now) {
   updateScoreboard();
   updateTicker();
   updateLadder();
+  updateNewJob();
   priceChart?.setToday(Math.min(6, Math.floor(S.t / 24)));
   gantt?.setHour(S.t);
   const scrub = $('scrub');
@@ -587,6 +827,7 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)
   initHall().then(() => { for (let i = 0; i < (Number(Q.get('turn')) || 0) % 4; i++) call('rotate', +1); });
   initAgentPanel();
+  window.addEventListener('agent:step', onAgentStep);
   window.addEventListener('agent:plan', onAgentPlan);
   loadMode(S.mode);
   requestAnimationFrame(frame);

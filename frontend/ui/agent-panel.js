@@ -1,8 +1,11 @@
-// "Ask Nemotron" panel: plain-English request -> POST /request -> tool trace + explanation.
-// Self-contained (own CSS, own fetch). Wire-up: see docs/INTEGRATION.md.
-// Emits window 'agent:plan' {task, plan, explanation} so main.js can swap the new plan in.
+// "Ask Nemotron" panel: plain-English request -> POST /request/stream (NDJSON, one event per
+// line as it happens) -> live tool trace + explanation. Falls back to POST /request if the
+// stream endpoint is missing. Self-contained (own CSS, own fetch). Wire-up: docs/INTEGRATION.md.
+// Emits window 'agent:step' (every stream event: start, thinking, tool, explaining, done, error)
+// and 'agent:plan' {task, plan, asapPlan, explanation} so main.js can swap the new plan in.
 
 const TIMEOUT_MS = 90_000;          // Nemotron on build.nvidia.com takes ~13-40 s per request
+const STREAM_IDLE_MS = 90_000;      // stream: give up if no event arrives for this long
 const HANDOFF_TIMEOUT_MS = 90_000;
 
 // Must match backend/app/demo_requests.py DEMO_REQUESTS keys exactly.
@@ -71,7 +74,71 @@ async function postJSON(path, body, timeoutMs) {
   throw lastErr || new Error('backend unreachable');
 }
 
+class StreamUnavailable extends Error {}
+
+/**
+ * POST /request/stream and call onEvent(evt) for every NDJSON line the moment it arrives.
+ * Resolves with the final AgentResponse (the 'done' event). Throws StreamUnavailable when no
+ * base serves the stream (404/405, not NDJSON, unreachable) so the caller can use POST /request.
+ */
+async function streamRequest(text, onEvent) {
+  const bases = workingBase !== null ? [workingBase, ...BASES.filter((b) => b !== workingBase)] : BASES;
+  for (const base of bases) {
+    const ctrl = new AbortController();
+    let timer = setTimeout(() => ctrl.abort(), STREAM_IDLE_MS);
+    const poke = () => { clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), STREAM_IDLE_MS); };
+    let res;
+    try {
+      res = await fetch(base + '/request/stream', {
+        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
+        body: JSON.stringify({ text }), signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw e;
+      continue;                                    // unreachable base: try the next one
+    }
+    const type = res.headers.get('content-type') || '';
+    if (!res.ok || !res.body || !/ndjson|jsonl|stream|text\/plain/i.test(type)) {
+      clearTimeout(timer);
+      ctrl.abort();
+      continue;                                    // 404/405 or not a stream: not available here
+    }
+    workingBase = base;
+    try {
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let final = null;
+      const handle = (line) => {
+        if (!line.trim()) return;
+        let evt;
+        try { evt = JSON.parse(line); } catch { console.warn('[agent-panel] bad stream line:', line); return; }
+        onEvent(evt);
+        if (evt.type === 'done') final = evt.response || {};
+        if (evt.type === 'error') throw Object.assign(new Error(evt.message || 'agent error'), { fromStream: true });
+      };
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        poke();
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) { handle(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+      }
+      handle(buf + dec.decode());
+      if (!final) throw new Error('The planner stream ended before it finished.');
+      return final;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new StreamUnavailable('no /request/stream');
+}
+
 function friendlyError(e) {
+  if (e?.fromStream) return `The agent hit an error: ${e.message}`;
+  if (/stream ended/.test(e?.message || '')) return e.message;
   if (e?.name === 'AbortError') return 'Nemotron took too long (over 90 s). Try one of the rehearsed requests below.';
   return 'Could not reach the planner backend. Start it with: cd backend && .venv/bin/uvicorn app.main:app';
 }
@@ -121,33 +188,98 @@ function mount(opts) {
     if (text) run(text);
   });
 
+  const emit = (evt) => {
+    try { window.dispatchEvent(new CustomEvent('agent:step', { detail: evt })); } catch (e) { console.warn('[agent-panel] agent:step listener failed:', e); }
+  };
+
   async function run(text) {
     if (busy) return;
     busy = true;
     setBusy(true);
     result.replaceChildren();
     const t0 = performance.now();
+    const live = liveTrace();
+    let waitText = 'Nemotron is planning';
     status.className = 'ap-status ap-wait';
-    const tick = () => { status.textContent = `Nemotron is planning… ${Math.round((performance.now() - t0) / 1000)} s`; };
+    const tick = () => { status.textContent = `${waitText}… ${Math.round((performance.now() - t0) / 1000)} s`; };
     tick();
     const timer = setInterval(tick, 1000);
+    let started = false, ended = false;
     try {
-      const r = await postJSON('/request', { text }, TIMEOUT_MS);
+      let r;
+      try {
+        r = await streamRequest(text, (evt) => {
+          if (evt.type === 'start') started = true;
+          if (evt.type === 'done' || evt.type === 'error') ended = true;
+          if (evt.type === 'thinking') waitText = 'Nemotron is thinking';
+          else if (evt.type === 'tool') waitText = evt.by === 'code' ? 'Our code is checking' : 'Nemotron is working';
+          else if (evt.type === 'explaining') waitText = 'Writing the explanation';
+          tick();
+          live.add(evt);
+          emit(evt);
+        });
+      } catch (e) {
+        if (!(e instanceof StreamUnavailable)) throw e;
+        // Older backend: one blocking POST /request. Tell main.js a run started, then the result.
+        live.reset();
+        if (!started) { started = true; emit({ type: 'start', text, llm: null, stream: false }); }
+        live.add({ type: 'start' });
+        r = await postJSON('/request', { text }, TIMEOUT_MS);
+        ended = true;
+        emit({ type: 'done', response: r, stream: false });
+      }
       const secs = Math.round((performance.now() - t0) / 1000);
       status.className = 'ap-status';
       status.textContent = `Done in ${secs} s.`;
-      render(r);
+      render(r, live);
       if (r?.task && r?.plan) {
         window.dispatchEvent(new CustomEvent('agent:plan', { detail: { task: r.task, plan: r.plan, asapPlan: r.asap_plan, explanation: r.explanation } }));
       }
     } catch (e) {
       status.className = 'ap-status ap-err';
       status.textContent = friendlyError(e);
+      live.stop();
+      if (started && !ended) emit({ type: 'error', message: e?.message || String(e), local: true });
     } finally {
       clearInterval(timer);
       busy = false;
       setBusy(false);
     }
+  }
+
+  // The trace as it happens: one row per tool event, plus a "thinking" row between steps.
+  function liveTrace() {
+    const ol = el('ol', { class: 'ap-trace ap-live-trace' });
+    const head = el('div', { class: 'ap-h', text: 'What the agent is doing' });
+    const pending = el('li', { class: 'ap-step ap-pending' },
+      el('span', { class: 'ap-tag', text: 'Nemotron' }),
+      el('span', { class: 'ap-step-txt', text: 'Reading the request…' }));
+    let count = 0;
+    const show = (txt, tag) => {
+      pending.querySelector('.ap-step-txt').textContent = txt;
+      pending.querySelector('.ap-tag').textContent = tag;
+      ol.append(pending);                       // keep it last
+      if (!head.isConnected) result.replaceChildren(head, ol);
+    };
+    return {
+      get count() { return count; },
+      ol,
+      add(evt) {
+        if (evt.type === 'start') show('Reading the request…', 'Nemotron');
+        else if (evt.type === 'thinking') show(`Thinking about step ${evt.step ?? count + 1}…`, 'Nemotron');
+        else if (evt.type === 'explaining') show('Writing the explanation…', 'Nemotron');
+        else if (evt.type === 'tool') {
+          const li = stepItem(evt.label || evt.name, toolDetail(evt));
+          li.classList.add('ap-fresh');
+          count++;
+          ol.insertBefore(li, pending.isConnected ? pending : null);
+          pending.remove();
+          if (!head.isConnected) result.replaceChildren(head, ol);
+        } else if (evt.type === 'done' || evt.type === 'error') pending.remove();
+      },
+      stop() { pending.remove(); },
+      reset() { pending.remove(); ol.replaceChildren(); count = 0; },
+    };
   }
 
   function setBusy(on) {
@@ -156,12 +288,18 @@ function mount(opts) {
     box.classList.toggle('ap-busy', on);
   }
 
-  function render(r) {
+  function render(r, live) {
     const parts = [];
     const calls = Array.isArray(r?.tool_calls) ? r.tool_calls : [];
     if (calls.length) {
       parts.push(el('div', { class: 'ap-h', text: 'What the agent did' }));
-      parts.push(el('ol', { class: 'ap-trace' }, calls.map(stepItem)));
+      // keep the live rows (they carry details) when they match the final list one for one
+      if (live && live.count === calls.length) {
+        live.stop();
+        live.ol.classList.remove('ap-live-trace');
+        live.ol.querySelectorAll('.ap-fresh').forEach((n) => n.classList.remove('ap-fresh'));
+        parts.push(live.ol);
+      } else parts.push(el('ol', { class: 'ap-trace' }, calls.map((c) => stepItem(c))));
     }
     if (r?.task) parts.push(taskChip(r.task, r.plan));
     parts.push(el('p', { class: 'ap-expl', text: r?.explanation || 'No explanation returned.' }));
@@ -198,7 +336,7 @@ function mount(opts) {
   return { run, element: box };
 }
 
-function stepItem(raw) {
+function stepItem(raw, detail) {
   const s = String(raw);
   let kind = 'llm', name = s;
   if (s.startsWith('guardrail:')) { kind = 'code'; name = s.slice(10); }
@@ -210,7 +348,65 @@ function stepItem(raw) {
   return el('li', { class: `ap-step ap-${kind}` },
     el('span', { class: 'ap-tag', text: tag }),
     el('span', { class: 'ap-step-txt', text: (STEP_LABEL[base] || base) + arg }),
+    detail ? el('span', { class: 'ap-detail', text: detail }) : null,
     el('code', { class: 'ap-fn', text: base }));
+}
+
+/** "D01–D10" for a contiguous run in one row, else the list. Formatting only. */
+export function rackSpan(racks) {
+  if (!Array.isArray(racks) || !racks.length) return '';
+  const row = racks[0][0];
+  const nums = racks.map((r) => Number(r.slice(1)));
+  const contiguous = racks.every((r, i) => r[0] === row && (i === 0 || nums[i] === nums[i - 1] + 1));
+  return contiguous && racks.length > 2 ? `${racks[0]}–${racks[racks.length - 1]}` : racks.join(', ');
+}
+
+// One short line of what a tool returned, straight from its result (no numbers of our own).
+function toolDetail(evt) {
+  const r = evt.result || {};
+  if (r.error) return `Error: ${r.error}`;
+  switch (evt.name) {
+    case 'lookup_equipment': return r.zone ? `${r.equipment}: zone ${r.zone}, racks ${rackSpan(r.racks)}` : '';
+    case 'day_windows': return Array.isArray(r.windows) ? windowsText(r.windows) : '';
+    case 'add_task':
+    case 'pinned_demo_task': {
+      const t = r.task;
+      return t ? `${t.id} ${t.name}, ${t.duration_hrs} h, ${t.racks_affected?.length ?? 0} racks` : '';
+    }
+    case 'make_plan': {
+      const tot = typeof r.total_cost === 'number' ? `total $${Math.round(r.total_cost).toLocaleString('en-US')}` : '';
+      const un = r.unscheduled?.length ? `, ${r.unscheduled.length} not scheduled` : '';
+      return tot + un;
+    }
+    case 'simulate': return typeof r.violations === 'number' ? (r.violations ? `${r.violations} problems found` : 'No conflicts or overheats') : '';
+    default: return '';
+  }
+}
+
+/** Week-hour windows -> "Wed, Fri, all day" / "Mon to Fri, 08:00 to 18:00". Formatting only. */
+export function windowsText(windows) {
+  if (!Array.isArray(windows) || !windows.length) return '';
+  const hh = (h) => `${String(h).padStart(2, '0')}:00`;
+  const groups = new Map();
+  for (const w of windows) {
+    const d0 = Math.floor(w.start_hour / 24);
+    const span = w.end_hour - w.start_hour;
+    const key = span >= 168 ? 'week' : span === 24 && w.start_hour % 24 === 0 ? 'all day'
+      : w.end_hour <= (d0 + 1) * 24 ? `${hh(w.start_hour % 24)} to ${hh(w.end_hour - d0 * 24)}`
+      : `${hourLabel(w.start_hour)} to ${hourLabel(w.end_hour)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d0);
+  }
+  return [...groups].map(([key, days]) => {
+    if (key === 'week') return 'any time this week';
+    if (key.includes(' to ') && /^[A-Z]/.test(key)) return key;
+    return `${dayList(days)}, ${key}`;
+  }).join('; ');
+}
+function dayList(idx) {
+  const u = [...new Set(idx)].sort((a, b) => a - b);
+  const run = u.length > 2 && u.every((d, i) => i === 0 || d === u[i - 1] + 1);
+  return run ? `${DAYS[u[0]]} to ${DAYS[u[u.length - 1]]}` : u.map((d) => DAYS[d]).join(', ');
 }
 
 function taskChip(task, plan) {

@@ -80,3 +80,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .ap-wait::before { animation: none; } }
+
+/* live trace: rows arrive one by one while the stream runs */
+.ap-detail { grid-column: 3; font-size: 11.5px; line-height: 1.35; color: var(--ink-2, #4A4842); }
+.ap-pending { counter-increment: none; color: var(--ink-3, #8A867B); }
+.ap-pending::before { content: ''; }
+.ap-pending .ap-tag { color: var(--ink-3, #8A867B); border-style: dashed; }
+.ap-pending .ap-step-txt { animation: ap-pulse 1.4s ease-in-out infinite; }
+.ap-fresh { animation: ap-in .35s ease-out; }
+@keyframes ap-in { from { opacity: 0; transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .ap-pending .ap-step-txt, .ap-fresh { animation: none; } }

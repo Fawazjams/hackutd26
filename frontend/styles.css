@@ -140,7 +140,7 @@ a { color: inherit; }
 .sb-delta { display: block; position: relative; height: 4px; margin: 12px 0 12px; border-radius: 2px; background: var(--hair-2); overflow: hidden; }
 .sb-delta i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ours); transition: width .3s; }
 .sb-clockline { display: flex; align-items: baseline; gap: 10px; }
-.sb-clock { font: 600 22px/1 var(--f-cond); color: var(--ink); }
+.sb-clock { flex: none; white-space: nowrap; font: 600 22px/1 var(--f-cond); color: var(--ink); }
 .sb-status { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-status.ff { color: var(--ours-ink); }
 
@@ -173,6 +173,41 @@ a { color: inherit; }
 .ticker .what { overflow: hidden; text-overflow: ellipsis; }
 .ticker .what b { color: var(--ink); font-weight: 600; }
 .ticker .what b.heat { color: var(--asap-ink); }
+
+/* ---------- Live agent run: narration callout + new-job card, top-center of the stage ---------- */
+.agent-callout, .newjob {
+  position: fixed; z-index: 6; top: 20px;
+  left: calc(var(--left-w) + (100vw - var(--left-w) - var(--panel-w) - var(--gutter) * 2) / 2);
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - var(--left-w) - var(--panel-w) - var(--gutter) * 4));
+  background: var(--sheet); border: 1px solid var(--hair); border-radius: 8px;
+  box-shadow: 0 18px 36px -24px rgba(23, 35, 43, 0.5);
+}
+.agent-callout { padding: 10px 14px 11px; animation: fade .25s ease-out; }
+.ac-head { display: flex; align-items: center; gap: 8px; font: 600 13px/1.25 var(--f-ui); color: var(--ink-2); }
+.ac-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); animation: pulse 1.2s ease-in-out infinite; }
+.ac-title { flex: 1; min-width: 0; }
+.ac-secs { flex: none; font-weight: 400; font-size: 12px; color: var(--ink-3); }
+.ac-text { margin-top: 4px; font: 600 17px/1.3 var(--f-ui); color: var(--ink); }
+.ac-text:empty { display: none; }
+
+.newjob { padding: 10px 14px 12px; border-color: var(--ink); border-left: 4px solid var(--ours); animation: fade .25s ease-out; }
+.nj-head { display: flex; align-items: center; justify-content: space-between; font: 500 12px/1.2 var(--f-ui); color: var(--ink-3); }
+.nj-x { border: 0; background: none; padding: 0 2px; font-size: 18px; line-height: 1; color: var(--ink-3); }
+.nj-l1 { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.nj-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 16px/1.25 var(--f-ui); color: var(--ink); }
+.nj-cost { flex: none; font: 600 20px/1 var(--f-cond); color: var(--ours-ink); }
+.nj-l2 { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 3px; font-size: 13px; color: var(--ink-2); }
+.nj-slot { font-weight: 600; color: var(--ours-ink); }
+.nj-asap { margin-top: 2px; font-size: 12px; color: var(--asap-ink); }
+.nj-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair-2); }
+.nj-status { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); }
+.newjob[data-state="live"] .nj-status { color: var(--ink); font-weight: 600; }
+.newjob[data-state="live"] .nj-status::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--amber); vertical-align: 1px; }
+.nj-replay { flex: none; height: 28px; padding: 0 10px; border-radius: var(--r); border: 1px solid var(--ink); background: var(--ink); color: var(--sheet); font: 600 12.5px/1 var(--f-ui); }
+
+/* allowed windows of the new job on the week timeline */
+.gantt .win-r { fill: color-mix(in srgb, var(--amber) 30%, transparent); stroke: color-mix(in srgb, var(--amber) 80%, var(--ink)); stroke-width: .75; stroke-dasharray: 2 2; }
 
 /* ---------- Key hints ---------- */
 .keys {
@@ -485,12 +520,14 @@ body.mode-cloud .private-only, body.mode-private .cloud-only { display: none; }
   .panel { top: calc(var(--gutter) + 40px); transform: translateX(calc(100% + 30px)); transition: transform .25s ease-out; }
   body.panel-open .panel { transform: none; }
   .howto { width: 260px; }
+  .agent-callout, .newjob { top: 64px; left: auto; right: var(--gutter); transform: none; width: min(380px, calc(100vw - 300px)); }
 }
 @media (max-width: 640px) {
   .brand { left: 16px; right: 16px; width: auto; }
   .sb-saved b { font-size: 40px; }
   .ticker { display: none; }
   .howto { left: 16px; right: 16px; width: auto; }
+  .agent-callout, .newjob { top: auto; bottom: 72px; left: 16px; right: 16px; width: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
