@@ -6,6 +6,7 @@
 //   pi.refresh();        // after plans or mode change
 //   pi.setToday(d);      // 0..6, cheap; call every frame
 //   pi.openDay(d);       // open the hour-by-hour panel (null closes it)
+import { eq, v, op, frac } from './formula.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -78,6 +79,7 @@ export function initPriceInsights(el, { getPlans = () => null, getMode = () => '
       <div class="pi-chart" data-hist></div>
       <div class="pi-key" data-histkey></div>
       <div class="pi-read" data-histread aria-live="polite"></div>
+      <div class="eq-stack" data-eqhist></div>
     </div>
     <div class="pi-sec">
       <div class="pi-h"><span class="pi-t">This week's downtime rate</span></div>
@@ -85,6 +87,7 @@ export function initPriceInsights(el, { getPlans = () => null, getMode = () => '
       <div class="pi-chart" data-week></div>
       <div class="pi-hint" data-weekhint>Pick a day to see it hour by hour.</div>
       <div class="pi-day" data-day hidden></div>
+      <div class="eq-stack" data-eqweek></div>
     </div>
     <p class="pi-src">Data: <a href="https://getdeploying.com/gpus" target="_blank" rel="noopener">GetDeploying, GPU rental price history</a>,
       <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.
@@ -138,6 +141,18 @@ export function initPriceInsights(el, { getPlans = () => null, getMode = () => '
     txt(svg, x(weeks[0].date) + 2, y(weeks[0].median) - 6, usd(weeks[0].median), 'pi-lab');
 
     $('histkey').innerHTML = `<span><i class="k-line"></i>Median</span><span><i class="k-band"></i>Cheapest to priciest provider</span><span><i class="k-fc"></i>Our forecast, 90% range</span>`;
+    const f0 = fc[0], a7 = frac(v('a'), '7'), pHat = '<i class="eq-hat">p</i>';
+    $('eqhist').innerHTML = eq({
+      n: 10,
+      f: `${pHat}(${v('d')}) ${op('=')} ${v('p', '0')} ${op('+')} ${v('β')} · ${a7}`,
+      plug: `${v('p', '0')} = ${usd(last.median)} (week of ${fmtDate(last.date)}), so ${pHat}(${DAYS[f0.day]}) = <b>${usd(f0.price)}</b>`,
+      where: `${v('p', '0')} latest real median, ${v('β')} its 8-week linear trend per week, ${v('a')} days past the last real price.`,
+    }) + eq({
+      n: 11,
+      f: `${pHat} · e<sup>−1.645 ${v('σ')} √(a/7)</sup> ${op('≤')} ${v('p')} ${op('≤')} ${pHat} · e<sup>+1.645 ${v('σ')} √(a/7)</sup>`,
+      plug: `90% band for ${DAYS[f0.day]}: ${usd(f0.low)} to ${usd(f0.high)}`,
+      where: `${v('σ')} is the 26-week volatility of weekly log price changes; the band widens with the square root of time.`,
+    });
 
     // hover: crosshair + readout
     const pts = weeks.map((w) => ({ kind: 'w', ...w })).concat(fc.map((f) => ({ kind: 'f', ...f })));
@@ -190,6 +205,14 @@ export function initPriceInsights(el, { getPlans = () => null, getMode = () => '
       g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
     paintWeekState();
+    const d0 = S.week[0], cloud = d0.mode === 'cloud', mul = 1 + d0.sla_factor;
+    const uBar = d0.avg_rate / (d0.market_price * mul);
+    $('eqweek').innerHTML = eq({
+      n: 12,
+      f: `${v('r')}(${v('h')}) ${op('=')} ${v('p')}(${v('d')}) · ${v('u')}(${v('h')})${cloud ? ` · (1 ${op('+')} ${v('κ')}${v('σ')})` : ''}`,
+      plug: `${DAYS[d0.day]}: ${usd(d0.market_price)} × ${pct(uBar)} busy${cloud ? ` × ${mul.toFixed(2)}` : ''} = <b>${usd(d0.avg_rate)}</b> per GPU-hour on average`,
+      where: `${v('u')}(${v('h')}) share of GPUs busy that hour (assumed, seeded)${cloud ? `; ${v('κ')} = ${d0.contracted_share} contracted share, ${v('σ')} = ${d0.sla_credit} SLA credit (assumed)` : ''}.`,
+    });
   }
   function paintWeekState() {
     el.querySelectorAll('.pi-dbar').forEach((g) => {

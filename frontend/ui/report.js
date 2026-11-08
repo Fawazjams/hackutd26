@@ -1,5 +1,6 @@
 // Week report: a full-screen engineering sheet comparing our plan with ASAP.
 // Everything is computed from the plans, backlog and prices passed in. Hand-written SVG.
+import { eq, v, op, sum as Σ, usd as signedUsd } from './formula.js';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const NS = 'http://www.w3.org/2000/svg';
@@ -253,6 +254,7 @@ function build({ plans, backlog, prices, mode }, { inline = false } = {}) {
   root.innerHTML = `
   <div class="rp-sheet">${head}
     <section class="rp-kpis" aria-label="Headline numbers"></section>
+    <section class="eq-row" data-eqs aria-label="How the totals are made"></section>
     <section class="rp-grid2">
       <figure class="rp-card rp-wide" data-fig="cum">
         <figcaption><h2>Cumulative cost over the week</h2>
@@ -302,6 +304,41 @@ function build({ plans, backlog, prices, mode }, { inline = false } = {}) {
   root.querySelector('[data-fig="cat"]').appendChild(groupedBars(catK, catK.map((k) => catO[k]), catK.map((k) => catA[k]), tip, { ariaLabel: 'Cost by category, our plan against ASAP' }));
   const dO = perDay(co.perHour), dA = perDay(ca.perHour);
   root.querySelector('[data-fig="day"]').appendChild(groupedBars(DAYS, dO, dA, tip, { ariaLabel: 'Spend per day, our plan against ASAP' }));
+
+  // equations, with this week's numbers plugged in
+  const S = cloud ? ` ${op('+')} ${v('S', 'j')}` : '';
+  const parts = (c) => [c['Lost revenue'], ...(cloud ? [c['SLA credits']] : []), c['Failure risk'], c['Overheat outages']]
+    .map(usd).join(` ${op('+')} `);
+  root.querySelector('[data-eqs]').innerHTML = eq({
+    n: 1,
+    f: `${v('C')} ${op('=')} ${Σ('j ∈ jobs')} ( ${v('D', 'j')}${S} ${op('+')} ${v('R', 'j')} ) ${op('+')} ${v('O')}`,
+    plug: `${v('C', '', 'ours')} = ${parts(catO)} = <b>${usd(oursTotal)}</b>`,
+    where: `${v('D')} ${cloud ? 'lost revenue' : 'replacement rental'}, ${cloud ? `${v('S')} SLA credits, ` : ''}${v('R')} failure risk of waiting, ${v('O')} overheat outages.`,
+  }) + eq({
+    n: 2,
+    f: `Δ${v('C')} ${op('=')} ${v('C', '', 'ASAP')} ${op('−')} ${v('C', '', 'ours')}`,
+    plug: `${usd(asapTotal)} − ${usd(oursTotal)} = <b${saved < 0 ? ' class="bad"' : ''}>${signedUsd(saved)}</b>, ${savedPct.toFixed(1)}% of the ASAP bill`,
+    where: 'Same jobs, same week, same prices. Only the start times differ.',
+  });
+  root.querySelector('[data-fig="cum"]').insertAdjacentHTML('beforeend', eq({
+    n: 3, inset: true,
+    f: `${v('C')}(${v('t')}) ${op('=')} ${Σ('h = 0', 't')} ${v('c')}(${v('h')})`,
+    plug: `${v('C', '', 'ours')}(168) = <b>${usd(co.cum[168])}</b>, ${v('C', '', 'ASAP')}(168) = <b class="bad">${usd(ca.cum[168])}</b>`,
+    where: `${v('c')}(${v('h')}) is the spend in hour ${v('h')}: each job's cost spread over its hours, each overheat at the hour it happens.`,
+  }));
+  const bigK = catK.reduce((a, k) => (catA[k] - catO[k] > catA[a] - catO[a] ? k : a), catK[0]);
+  const sym = { 'Lost revenue': 'D', 'SLA credits': 'S', 'Failure risk': 'R', 'Overheat outages': 'O' }[bigK];
+  root.querySelector('[data-fig="cat"]').insertAdjacentHTML('beforeend', eq({
+    n: 4, inset: true,
+    f: `${v('C')} ${op('=')} ${v('D')} ${op('+')} ${cloud ? `${v('S')} ${op('+')} ` : ''}${v('R')} ${op('+')} ${v('O')}`,
+    plug: `Widest gap: ${v(sym, '', 'ASAP')} = <b class="bad">${usd(catA[bigK])}</b> against ${v(sym, '', 'ours')} = <b>${usd(catO[bigK])}</b>`,
+  }));
+  const peak = dA.reduce((a, x, i) => (x > dA[a] ? i : a), 0);
+  root.querySelector('[data-fig="day"]').insertAdjacentHTML('beforeend', eq({
+    n: 5, inset: true,
+    f: `${v('C', 'd')} ${op('=')} ${Σ('h = 24d', '24d + 23')} ${v('c')}(${v('h')})`,
+    plug: `${DAYS[peak]}: ${v('C', peak, 'ASAP')} = <b class="bad">${usd(dA[peak])}</b> against ${v('C', peak, 'ours')} = <b>${usd(dO[peak])}</b>`,
+  }));
 
   // table
   const asapBy = Object.fromEntries((asap.items || []).map((i) => [i.task_id, i]));

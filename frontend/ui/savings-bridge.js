@@ -1,6 +1,7 @@
 // "Where the savings come from": a bridge (waterfall) from the ASAP week cost down to our plan's,
 // one step per cost category, plus savings per job (diverging bars). Owner: Nandhan.
 // renderBridge(el, { plans, mode }) — re-callable; numbers come straight from the two Plans.
+import { eq, v, op } from './formula.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const usd = (v) => `$${Math.round(Math.abs(v)).toLocaleString('en-US')}`;
@@ -96,17 +97,40 @@ export function renderBridge(root, { plans, mode } = {}) {
         <figcaption><h3>From the ASAP bill to ours</h3>
           <p>Each step is one cost category: how much lower it is under our plan for the same jobs.</p></figcaption>
         <div class="br-chart"></div>
+        <div data-eq="bridge"></div>
         <p class="br-take"></p>
       </figure>
       <figure class="br-card">
         <figcaption><h3>Savings by job</h3>
           <p>Green bars save money against ASAP; red ones cost a little more.</p></figcaption>
         <div class="pj"></div>
+        <div data-eq="job"></div>
       </figure>
     </div>`;
   const steps = bridgeChart(root.querySelector('.br-chart'), plans, cloud);
   perJob(root.querySelector('.pj'), plans);
   const saved = plans.asap.total_cost - plans.optimized.total_cost;
+
+  const sym = cloud ? ['O', 'D', 'S', 'R'] : ['O', 'D', 'R'];
+  const terms = steps.map(([, d], i) => (i ? (d < -0.5 ? ' − ' : ' + ') : d < -0.5 ? '−' : '') + usd(d)).join('');
+  root.querySelector('[data-eq="bridge"]').innerHTML = eq({
+    n: 6, inset: true,
+    f: `Δ${v('C')} ${op('=')} ${sym.map((s) => `Δ${v(s)}`).join(` ${op('+')} `)}`,
+    plug: `${terms} = <b${saved < 0 ? ' class="bad"' : ''}>${saved < -0.5 ? '−' : ''}${usd(saved)}</b>`,
+    where: `Each Δ is that category's ASAP cost minus ours, the steps of the bridge above.`,
+  });
+  const a = new Map((plans.asap.items || []).map((i) => [i.task_id, i]));
+  const best = (plans.optimized.items || []).filter((o) => a.has(o.task_id))
+    .sort((p, q) => (a.get(q.task_id).total - q.total) - (a.get(p.task_id).total - p.total))[0];
+  if (best) {
+    const x = a.get(best.task_id), d = x.total - best.total;
+    root.querySelector('[data-eq="job"]').innerHTML = eq({
+      n: 7, inset: true,
+      f: `Δ${v('C', 'j')} ${op('=')} ${v('C', 'j', 'ASAP')}(${v('s', 'j', 'ASAP')}) ${op('−')} ${v('C', 'j', 'ours')}(${v('s', 'j', '*')})`,
+      plug: `${esc(best.name)}: ${usd(x.total)} − ${usd(best.total)} = <b${d < 0 ? ' class="bad"' : ''}>${d < -0.5 ? '−' : ''}${usd(d)}</b>`,
+      where: `${v('s', 'j')} is the job's start hour: ${esc(best.start_label)} in our plan, ${esc(x.start_label)} under ASAP.`,
+    });
+  }
   const big = steps.slice().sort((p, q) => q[1] - p[1])[0];
   root.querySelector('.br-take').innerHTML = saved > 0 && big
     ? `Biggest lever: <b>${esc(big[0].toLowerCase())}</b>, ${usd(big[1])} of the ${usd(saved)} saved (${Math.round((100 * big[1]) / saved)}%).`

@@ -1,5 +1,6 @@
 // Full-page "Schedule" view: what runs when (our plan vs ASAP), and why.
 // renderSchedule(el, { plans, backlog, mode, now }) replaces el's content; safe to call repeatedly.
+import { eq, v, op, fn, st } from './formula.js';
 
 const CSS_ID = 'schedule-view-css';
 function ensureCss() {
@@ -121,10 +122,24 @@ export function renderSchedule(el, { plans, backlog = [], mode, now } = {}) {
     ? `<section class="sv-uns"><h2>Couldn't fit this week</h2><ul>${uns.map((u) => `<li><strong>${esc(nameOf(u.task_id) || u.task_id)}</strong> <span class="sv-muted">(${u.plan})</span>: ${esc(u.reason)}</li>`).join('')}</ul></section>`
     : `<p class="sv-muted sv-allfit">Every job fits in both plans this week.</p>`;
 
+  const limit = ours.temp_limit_c ?? asap.temp_limit_c ?? 32;
+  const equations = `<div class="eq-row">${eq({
+    n: 8,
+    f: `${v('s', 'j', '*')} ${op('=')} ${fn('arg min')}<sub>s ∈ windows(j)</sub> ${v('E', 'j')}(${v('s')})${st(`subject to: no two jobs overlap in a cooling zone, and ${v('T', 'z')}(${v('h')}) ≤ ${limit} °C for every zone and hour`)}`,
+    plug: `Our plan: ${(ours.items || []).length} jobs placed, <b>${(ours.overheats || []).length}</b> overheated zone-hours`,
+    where: `${v('E', 'j')}(${v('s')}) is the expected cost of starting job ${v('j')} at hour ${v('s')}; every candidate is checked in the hall thermal sim before it is kept.`,
+  })}${eq({
+    n: 9,
+    f: `${v('s', 'j', 'ASAP')} ${op('=')} ${fn('min')} { ${v('s')} ${op('∈')} windows(${v('j')}) : 9 ≤ ${v('s')} mod 24 &lt; 17 }${st('Monday to Friday, earliest slot whose cooling zone is free')}`,
+    plug: `ASAP: ${(asap.items || []).length} jobs placed, <b class="bad">${(asap.overheats || []).length}</b> overheated zone-hours`,
+    where: 'The usual plan: first business-hours slot that doesn’t share a cooling zone with a running job. No thermal check.',
+  })}</div>`;
+
   el.innerHTML = `<div class="sv">
     <header class="sv-head"><h1>This week's schedule</h1>
       <p>Our plan picks the cheapest hours that keep the hall cool. ASAP starts everything Monday morning.</p>
       <div class="sv-legend"><span><i class="sv-k ours"></i>Our plan</span><span><i class="sv-k asap"></i>ASAP</span><span><i class="sv-k heat"></i>ASAP overheat hour</span>${Number.isFinite(now) ? '<span><i class="sv-k now"></i>Now</span>' : ''}${mode ? `<span class="sv-muted">Mode: ${esc(mode)}</span>` : ''}</div>
+      ${equations}
     </header>
     <div class="sv-card">${svg}</div>
     <div class="sv-card sv-tablewrap"><table class="sv-table"><thead><tr><th>Job</th><th>Zone</th><th>Our start</th><th>ASAP start</th><th class="num">Our cost</th><th class="num">ASAP cost</th><th class="num">Difference</th><th>Why</th></tr></thead>

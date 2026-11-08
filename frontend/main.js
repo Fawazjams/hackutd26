@@ -915,7 +915,6 @@ function showSummary() {
     + (a.overheats.length && !o.overheats.length
       ? `ASAP overheated ${a.overheats.length} zone-hours; ours none. ${pct(heatShare)} of the savings is those overheats, priced as unplanned outages (assumed rate).`
       : '');
-  $('summary-swap').textContent = cloud ? 'Try Private DC mode' : 'Try GPU cloud mode';
   $('summary').hidden = false;
 }
 
@@ -1000,10 +999,6 @@ function directIdle() {
   if (S.show !== want) setShow(want);
   S.dirLabel = hot ? 'ASAP overheating: showing ASAP' : '';
 }
-function setMode(v) {
-  S.mode = v; setSeg('seg-mode', v);
-  loadMode(v);
-}
 function seek(t) {
   S.t = Math.max(0, Math.min(HOURS, t));
   if (S.t < HOURS) { $('summary').hidden = true; S.summaryDismissed = false; }
@@ -1015,7 +1010,6 @@ function pushView() {
 }
 
 function wireControls() {
-  seg('seg-mode', setMode);
   seg('seg-show', pickShow);
   seg('seg-speed', v => { S.speed = Number(v); });
   seg('seg-render', v => { S.view.pixelArt = v === 'pixel'; pushView(); });
@@ -1035,7 +1029,6 @@ function wireControls() {
   $('nj-replay').addEventListener('click', restart);
   $('nj-close').addEventListener('click', closeNewJob);
   $('al-close').addEventListener('click', hideAlarm);
-  $('summary-swap').addEventListener('click', () => setMode(S.mode === 'cloud' ? 'private' : 'cloud'));
   $('panel-toggle').addEventListener('click', () => {
     const open = document.body.classList.toggle('panel-open');
     $('panel-toggle').setAttribute('aria-expanded', String(open));
@@ -1212,7 +1205,7 @@ function render(now) {
 }
 
 // ---------------------------------------------------------------- boot
-// Optional deep-link for rehearsals and screenshots: ?mode=private&show=asap&t=36&speed=4&paused=1
+// Optional deep-link for rehearsals and screenshots: ?show=asap&t=36&speed=4&paused=1
 const Q = new URLSearchParams(location.search);
 const BOOT = {
   t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1',
@@ -1302,10 +1295,6 @@ function wireViews() {
     setView(tabs[j].dataset.view, { focus: true });
   });
   window.addEventListener('hashchange', () => setView(viewFromHash() || 'home'));
-  document.querySelector('.dt-nav')?.addEventListener('click', (e) => {
-    const a = e.target.closest('a'); if (!a) return;
-    e.preventDefault(); $(a.getAttribute('href').slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
   let start = viewFromHash();
   if (!start) {
     start = BOOT.day != null ? 'details' : 'home';
@@ -1341,7 +1330,6 @@ window.addEventListener('resize', () => {
 
 (function boot() {
   (window.__pendingErrors || []).forEach(m => window.__showDevError?.(m));
-  if (Q.get('mode') === 'private') { S.mode = 'private'; setSeg('seg-mode', 'private'); }
   if (Q.get('show') === 'asap') setShow('asap');
   if (['1', '4', '16'].includes(Q.get('speed'))) { S.speed = Number(Q.get('speed')); setSeg('seg-speed', Q.get('speed')); }
   wireControls();
