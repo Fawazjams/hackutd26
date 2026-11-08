@@ -25,6 +25,7 @@ const ROW_Z = [-7.5, -2.5, 2.5, 7.5];          // row A..D centre lines
 const RACK_X0 = -11, RACK_DX = 2.0;            // 10 racks per row: x = -11 .. 7
 const RACK = { w: 1.7, h: 3.0, d: 1.5 };
 const HALL = { x0: -16, x1: 16, z0: -11, z1: 11, wallH: 5.2 };
+const HALL_SCALE = 1.3;                         // the data hall is the main show: drawn 1.3x on a bigger apron
 
 // seeded RNG (mulberry32) so trees, rocks and blink patterns never change between runs
 function rng(seed) {
@@ -504,7 +505,7 @@ export async function createDataCenter(containerEl) {
       const key = i < 0 ? null : zoneId;
       if (key === shot.zone) return;
       shot.zone = key;
-      if (key) { shot.pos.set(-2, 1, ROW_Z[i]); cam.zoomTarget = 2.0; }
+      if (key) { shot.pos.set(-2 * HALL_SCALE, 1, ROW_Z[i] * HALL_SCALE); cam.zoomTarget = 1.8; }
       else { shot.pos.copy(home); cam.zoomTarget = 1; }
     },
     setPaused(p) { state.paused = !!p; },
@@ -592,6 +593,7 @@ function buildIsland(parent, R) {
   const plate = new THREE.Mesh(new THREE.BoxGeometry(16.25, 3.0, 0.14),
     [side, side, side, side, new THREE.MeshLambertMaterial({ map: tbTex, emissive: 0xffffff, emissiveMap: tbTex, emissiveIntensity: 0.12 }), side]);
   plate.position.set(-9, -2.55, D / 2 + 0.08);
+  plate.visible = false;   // decoration off: the hall is the main show
   g.add(plate);
   return g;
 }
@@ -604,36 +606,10 @@ function buildCampus(parent, R, anim) {
   const nightMats = [];
 
   // concrete apron + paths
-  box(36, 0.3, 26, mat(C.concrete), 0, 0.15, 0, g);
-  // dimension lines + survey ticks on the apron margin around the hall, in drawing ink
-  {
-    const PX = 32, AW = 36, AD = 26;
-    const X = (x) => (x + AW / 2) * PX, Z = (z) => (z + AD / 2) * PX;
-    const tex = markTexture(AW * PX, AD * PX, (c) => {
-      c.strokeStyle = SHEET.ink; c.fillStyle = SHEET.ink; c.lineWidth = 2;
-      const tick = (x, z) => { c.beginPath(); c.moveTo(x - 7, z + 7); c.lineTo(x + 7, z - 7); c.stroke(); };
-      const ext = (x1, z1, x2, z2) => { c.beginPath(); c.moveTo(x1, z1); c.lineTo(x2, z2); c.stroke(); };
-      // south: overall hall length
-      const zs = Z(12.25);
-      ext(X(-16), Z(11.45), X(-16), Z(12.7)); ext(X(16), Z(11.45), X(16), Z(12.7)); ext(X(-16), zs, X(16), zs);
-      tick(X(-16), zs); tick(X(16), zs);
-      c.font = `700 ${0.9 * PX}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'bottom';
-      const label = (txt, x, z) => { const m = c.measureText(txt).width + 12; c.fillStyle = SHEET.vellum; c.fillRect(x - m / 2, z - 0.95 * PX, m, 0.9 * PX); c.fillStyle = SHEET.ink; c.fillText(txt, x, z - 4); };
-      label('32 000', X(-2), zs + 0.45 * PX);
-      // east: overall hall width (text runs along the line)
-      const xe = X(17.2);
-      ext(X(16.45), Z(-11), X(17.7), Z(-11)); ext(X(16.45), Z(11), X(17.7), Z(11)); ext(xe, Z(-11), xe, Z(11));
-      tick(xe, Z(-11)); tick(xe, Z(11));
-      c.save(); c.translate(xe, Z(0)); c.rotate(-Math.PI / 2); label('22 000', 0, 0.45 * PX); c.restore();
-      // teal datum crosses at the apron corners (chilled-water teal = our plan's colour)
-      c.strokeStyle = SHEET.teal; c.lineWidth = 3;
-      for (const [x, z] of [[-17.2, -12.2], [17.2, -12.2], [-17.2, 12.2], [17.2, 12.2]]) {
-        ext(X(x) - 12, Z(z), X(x) + 12, Z(z)); ext(X(x), Z(z) - 12, X(x), Z(z) + 12);
-        c.beginPath(); c.arc(X(x), Z(z), 7, 0, Math.PI * 2); c.stroke();
-      }
-    });
-    decal(AW, AD, tex, 0, 0.305, 0, g);
-  }
+  box(36 * HALL_SCALE, 0.3, 26 * HALL_SCALE, mat(C.concrete), 0, 0.15, 0, g);
+  // campus extras below (paths, chillers, towers, generators, substation, dock, parking, gate, fence)
+  // stay built for their animations but are hidden: the data hall is the main show
+  const extrasFrom = g.children.length;
   box(4, 0.25, 12, mat(C.concreteDark), 6, 0.12, 19, g);        // drive to loading dock
   box(26, 0.22, 3, mat(C.concreteDark), -14, 0.11, 15, g);       // footpath
   box(3, 0.22, 10, mat(C.concreteDark), 21, 0.11, 2, g);         // path to generators
@@ -763,14 +739,14 @@ function buildCampus(parent, R, anim) {
   for (const z of [-25.5, 25.5]) box(66, 0.06, 0.06, mat(C.steel), 0, 1.4, z, g);
   for (const x of [-33.5, 33.5]) box(0.06, 0.06, 47, mat(C.steel), x, 1.4, 0, g);
 
+  for (const o of g.children.slice(extrasFrom)) o.visible = false;
+
   // ---- trees (instanced pines + round trees), seeded, avoiding built areas
-  const busy = [
-    [-17, 17, -12, 12], [-18, 14, -21, -12], [-31, -22, -12, 4], [21, 33, -11, 6], [20, 32, 12, 22],
-    [-25, -7, 15, 25], [1, 12, 11, 25], [-30, -24, 12, 18], [16, 24, -4, 8],
-  ];
+  const AX = 18 * HALL_SCALE + 1, AZ = 13 * HALL_SCALE + 1;   // keep trees off the (bigger) apron
+  const busy = [[-AX, AX, -AZ, AZ]];
   const free = (x, z) => !busy.some(([a, b, c, d]) => x > a - 1 && x < b + 1 && z > c - 1 && z < d + 1);
   const spots = [];
-  for (let i = 0; i < 400 && spots.length < 70; i++) {
+  for (let i = 0; i < 400 && spots.length < 26; i++) {
     const x = (R() - 0.5) * 64, z = (R() - 0.5) * 48;
     if (free(x, z) && spots.every(([sx, sz]) => (sx - x) ** 2 + (sz - z) ** 2 > 5)) spots.push([x, z, 0.8 + R() * 0.7, R()]);
   }
@@ -797,6 +773,7 @@ function buildCampus(parent, R, anim) {
     dummy.position.set(x, 0.6 * s, z); dummy.updateMatrix(); trunks.setMatrixAt(i, dummy.matrix);
   });
 
+  const lampsFrom = g.children.length;
   // ---- lamp posts (emissive heads light up at night)
   const lampMat = new THREE.MeshLambertMaterial({ color: 0xfff3c4, emissive: 0xffd36b, emissiveIntensity: 0 });
   nightMats.push(lampMat);
@@ -818,6 +795,8 @@ function buildCampus(parent, R, anim) {
     const segs = wk.path.map((a, i) => { const b = wk.path[(i + 1) % wk.path.length]; return Math.hypot(b[0] - a[0], b[1] - a[1]); });
     return { ...wk, p, segs, len: segs.reduce((s, v) => s + v, 0) };
   });
+
+  for (const o of g.children.slice(lampsFrom)) o.visible = false;   // lamps + walkers hidden too
 
   anim.push((t, dt) => {
     for (const f of fans) f.rotation.y += dt * 9;
@@ -872,6 +851,7 @@ function person(color) {
 function buildHall(parent, R, anim) {
   const g = new THREE.Group();
   parent.add(g);
+  g.scale.setScalar(HALL_SCALE);
   const { x0, x1, z0, z1, wallH } = HALL;
   const W = x1 - x0, D = z1 - z0;
 
