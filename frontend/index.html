@@ -7,7 +7,7 @@
   <meta name="description" content="Schedule GPU data-center maintenance at the lowest cost, priced in H100 compute-market dollars." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 
   <!-- Dev aid: surface any JS error on the page instead of failing silently. -->
@@ -44,12 +44,6 @@
     <div class="chip chip-offline" id="offline-chip" hidden title="The API did not answer, so this page is showing a saved copy of real backend responses.">
       <span class="chip-dot"></span>Offline, showing a saved plan
     </div>
-      <div class="tn-mode">
-        <div class="seg seg-2" role="radiogroup" aria-label="Mode" id="seg-mode">
-          <button role="radio" data-value="cloud" aria-checked="true">GPU cloud</button>
-          <button role="radio" data-value="private" aria-checked="false">Private DC</button>
-        </div>
-      </div>
       <details class="help" id="help">
         <summary aria-label="Help and view settings">?</summary>
         <div class="help-body">
@@ -216,9 +210,18 @@
 
   <!-- View 2: schedule -->
   <main class="view page" id="view-details" role="tabpanel" aria-labelledby="nav-details">
+  <section class="details-sec" id="view-report">
+    <header class="page-head"><span class="dt-step">The week</span><h1>The bottom line</h1></header>
+    <div class="page-card" id="report-host"></div>
+  </section>
+  <section class="details-sec" id="view-savings">
+    <header class="page-head"><span class="dt-step">Why</span><h1>Where the savings come from</h1>
+      <p>Same jobs, same week. The difference is when each one runs.</p></header>
+    <div id="bridge-host"></div>
+  </section>
   <section class="details-sec" id="view-schedule">
     <header class="page-head">
-      <h1>This week’s schedule</h1>
+      <span class="dt-step">When</span><h1>This week’s schedule</h1>
       <p>Every maintenance job, when our plan runs it, and what it costs compared with doing it as soon as possible.</p>
     </header>
     <div class="page-card" id="schedule-host"></div>
@@ -230,11 +233,9 @@
     </section>
     </div>
   </section>
-
-  <!-- View 3: prices -->
   <section class="details-sec" id="view-prices">
     <header class="page-head">
-      <h1>What downtime costs</h1>
+      <span class="dt-step">The market</span><h1>What downtime costs</h1>
       <p>Each hour a GPU is down costs its share of the H100 market price that day, scaled by how busy the hall is at that hour.</p>
     </header>
     <div class="page-card">
@@ -243,22 +244,45 @@
       <div class="caption credit" id="price-credit">Real weekly prices through Nov 2, daily forecast is our model. Data: <a href="https://getdeploying.com/gpus" target="_blank" rel="noopener">GetDeploying</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, forecast added.</div>
     </section>
     </div>
+  </section>
+  <section class="details-sec" id="view-howto">
+    <header class="page-head"><span class="dt-step">Method</span><h1>How it’s priced</h1></header>
     <section class="page-card howto" id="howto">
-      <h2>How it’s priced</h2>
+      
     <div class="howto-body">
-      <div class="formula">
-        <div><b>cost(hour)</b> = GPUs offline × utilization(hour) × price(day)<span class="cloud-only"> × (1 + SLA)</span></div>
-        <div class="plus-line">+ risk of waiting = failure chance(days waited) × unplanned cost</div>
+      <div class="eq-row">
+        <div class="eq">
+          <div class="eq-main"><div class="eq-f"><i>D</i><sub>j</sub>(<i>s</i>) <span class="eq-op">=</span> <span class="eq-sum"><small>s + L<sub>j</sub> − 1</small><span>Σ</span><small>h = s</small></span> <i>N</i><sub>j</sub> · <i>u</i>(<i>h</i>) · <i>p</i>(⌊<i>h</i>/24⌋)</div><span class="eq-n">(10)</span></div>
+          <div class="eq-where">Downtime cost of job <i>j</i> started at hour <i>s</i>: <i>N</i> GPUs offline for <i>L</i> hours, each busy hour worth that day’s H100 price.</div>
+        </div>
+        <div class="eq cloud-only">
+          <div class="eq-main"><div class="eq-f"><i>S</i><sub>j</sub> <span class="eq-op">=</span> <i>κ</i> · <i>σ</i> · <i>D</i><sub>j</sub></div><span class="eq-n">(11)</span></div>
+          <div class="eq-plug"><i>κ</i> = 0.70 contracted share, <i>σ</i> = 0.10 SLA credit, so <b>S = 7% of D</b></div>
+          <div class="eq-where">Credits owed on contracted hours missed. Both values assumed.</div>
+        </div>
+        <div class="eq">
+          <div class="eq-main"><div class="eq-f"><i>π</i><sub>j</sub>(<i>s</i>) <span class="eq-op">=</span> <span class="eq-fn">min</span>( 1, <i>r</i><sub>j</sub> · <span class="eq-frac"><span><i>s</i></span><span>24</span></span> )</div><span class="eq-n">(12)</span></div>
+          <div class="eq-where">Failure chance grows by <i>r</i> (0.5% to 2% per day, by job, assumed) for every day the job waits.</div>
+        </div>
+        <div class="eq">
+          <div class="eq-main"><div class="eq-f"><i>E</i><sub>j</sub> <span class="eq-op">=</span> (1 − <i>π</i><sub>j</sub>) <i>P</i><sub>j</sub> <span class="eq-op">+</span> <i>π</i><sub>j</sub> <i>U</i><sub>j</sub> <span class="eq-op">=</span> <i>P</i><sub>j</sub> <span class="eq-op">+</span> <i>R</i><sub>j</sub></div><span class="eq-n">(13)</span></div>
+          <div class="eq-plug"><i>P</i> = <i>D</i> + <i>S</i> planned, <i>U</i> = 3 × 1.2 × <i class="eq-bar">P</i> unplanned, <b>R = π (U − P)</b></div>
+          <div class="eq-where">An unplanned failure costs 3× the planned outage plus a 20% emergency premium (assumed), priced at the week’s average rate <i class="eq-bar">P</i>.</div>
+        </div>
+        <div class="eq">
+          <div class="eq-main"><div class="eq-f"><i>T</i><sub>z</sub>(<i>h</i>+1) <span class="eq-op">=</span> <i>T</i><sub>z</sub>(<i>h</i>) <span class="eq-op">+</span> 0.6 · ( <i>T</i><sub>z</sub><sup>*</sup>(<i>h</i>) − <i>T</i><sub>z</sub>(<i>h</i>) )</div><span class="eq-n">(14)</span></div>
+          <div class="eq-plug">Overheat when <b>T<sub>z</sub> &gt; 32 °C</b> (ASHRAE A1 allowable inlet limit)</div>
+          <div class="eq-where">Each cooling zone moves 60% of the way to its target temperature every hour. The target rises when the zone’s own cooling is down, more if a neighbour’s is down too.</div>
+        </div>
+        <div class="eq">
+          <div class="eq-main"><div class="eq-f"><i>O</i> <span class="eq-op">=</span> <span class="eq-sum"><small></small><span>Σ</span><small>T<sub>z</sub>(h) &gt; 32</small></span> <i>N</i><sub>z</sub><sup>on</sup>(<i>h</i>) · <i>u</i>(<i>h</i>) · <i>p</i>(<i>d</i>) · 3.6<span class="cloud-only"> · (1 <span class="eq-op">+</span> <i>κσ</i>)</span></div><span class="eq-n">(15)</span></div>
+          <div class="eq-where">Every overheated zone-hour is priced as an unplanned outage of the GPUs still running in that zone. Only ASAP has any.</div>
+        </div>
       </div>
-      <p><span class="cloud-only">In <b>GPU cloud</b> mode, downtime is lost revenue and the SLA term adds credits owed on contracted hours.</span><span class="private-only">In <b>Private DC</b> mode, downtime is what it costs to rent replacement GPUs; there is no SLA term.</span></p>
+      <p>Downtime is lost GPU-cloud revenue, and the SLA term adds credits owed on contracted hours.</p>
       <p>The planner tries every allowed start for every task, never overlaps two jobs in one cooling zone, and keeps the cheapest schedule. The baseline starts each job at the first business-hours slot.</p>
     </div>
     </section>
-  </section>
-
-  <!-- View 4: report -->
-  <section class="details-sec" id="view-report">
-    <div class="page-card" id="report-host"></div>
   </section>
   </main>
 
@@ -274,7 +298,6 @@
       <div class="summary-grid" id="summary-grid"></div>
       <div class="summary-actions">
         <button class="btn-dark" id="summary-replay">Replay the week</button>
-        <button class="btn-ghost" id="summary-swap">Show the other mode</button>
       </div>
     </div>
   </div>

@@ -1,7 +1,7 @@
 /* Money-at-risk card. Uses the tokens from styles.css. */
 .ex-body { display: grid; gap: 10px; }
-.ex-row { --c: var(--ours, #0B7A84); --ci: var(--ours-ink, #085E66); }
-.ex-row.ex-asap { --c: var(--asap, #EA5B1F); --ci: var(--asap-ink, #B4441A); }
+.ex-row { --c: var(--ours, #1F7A4D); --ci: var(--ours-ink, #155C38); }
+.ex-row.ex-asap { --c: var(--asap, #C8283C); --ci: var(--asap-ink, #9C1C2D); }
 .ex-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .ex-name { display: inline-flex; align-items: center; gap: 7px; font: 600 13px/1.2 var(--f-ui, 'Barlow', sans-serif); color: var(--ink, #17232B); }
 .ex-name::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--c); }

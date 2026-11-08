@@ -23,38 +23,46 @@
 .pc-sub { margin-top: 2px; font-size: 11.5px; color: var(--ink-3, #6B7880); }
 
 .pc-card { --st: var(--amber, #F2BE3A); padding: 7px 9px; border: 1px solid var(--rule, #B9C3C6); border-radius: var(--r, 4px); background: var(--sheet, #F6F8F8); }
-.pc-card[data-state="deal"] { --st: var(--ours, #0B7A84); border-color: color-mix(in srgb, var(--st) 45%, var(--rule, #B9C3C6)); }
-.pc-card[data-state="no_deal"] { --st: var(--asap, #EA5B1F); border-color: color-mix(in srgb, var(--st) 45%, var(--rule, #B9C3C6)); }
-.pc-card-head { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.pc-card[data-state="deal"] { --st: var(--ours, #1F7A4D); border-color: color-mix(in srgb, var(--st) 45%, var(--rule, #B9C3C6)); }
+.pc-card[data-state="no_deal"] { --st: var(--asap, #C8283C); border-color: color-mix(in srgb, var(--st) 45%, var(--rule, #B9C3C6)); }
+.pc-card-head { display: flex; align-items: baseline; gap: 6px; font-size: 13px; list-style: none; cursor: pointer; }
+.pc-card-head::-webkit-details-marker { display: none; }
 .pc-card-head > :first-child { margin-right: auto; }
 .pc-card-head::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--st); align-self: center; }
+.pc-card-head::after { content: '+'; flex: none; width: 12px; text-align: center; font-weight: 700; color: var(--ink-3, #6B7880); }
+.pc-card[open] > .pc-card-head::after { content: '−'; }
 .pc-fict { font-size: 10.5px; color: var(--ink-3, #6B7880); border: 1px dashed var(--ink-4, #A7B2B7); border-radius: 3px; padding: 0 4px; }
 .pc-facts { margin-top: 2px; font-size: 11.5px; color: var(--ink-3, #6B7880); }
 .pc-chat { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
 .pc-line { font-size: 12px; animation: pc-in .25s ease-out; }
 @keyframes pc-in { from { opacity: 0; transform: translateY(3px); } }
 .pc-who { font-weight: 600; }
-.pc-buyer .pc-who { color: var(--ours-ink, #085E66); }
+.pc-buyer .pc-who { color: var(--ours-ink, #155C38); }
 .pc-seller .pc-who { color: var(--ink-2, #3E4C55); }
-.pc-outcome { margin-top: 4px; font-size: 12px; font-weight: 600; }
-.pc-outcome:empty { display: none; }
-.pc-card[data-state="deal"] .pc-outcome { color: var(--ours-ink, #085E66); }
-.pc-card[data-state="no_deal"] .pc-outcome { color: var(--asap-ink, #B4441A); }
+.pc-outcome { font-size: 12px; font-weight: 600; color: var(--ink-3, #6B7880); white-space: nowrap; }
+.pc-card[data-state="deal"] .pc-outcome { color: var(--ours-ink, #155C38); }
+.pc-card[data-state="no_deal"] .pc-outcome { color: var(--asap-ink, #9C1C2D); }
 
 .pc-offer { padding: 9px 10px; border: 1px solid var(--ink, #17232B); border-radius: 6px; background: var(--sheet, #F6F8F8); }
-.pc-offer[data-status="accepted"] { border-color: var(--ours, #0B7A84); }
-.pc-offer[data-status="declined"] { border-color: var(--asap, #EA5B1F); }
+.pc-offer[data-status="accepted"] { border-color: var(--ours, #1F7A4D); }
+.pc-offer[data-status="declined"] { border-color: var(--asap, #C8283C); }
 .pc-none { font-size: 12.5px; color: var(--ink-2, #3E4C55); }
 .pc-h { font-size: 12px; font-weight: 600; color: var(--ink-2, #3E4C55); }
-.pc-offer-name { margin-top: 2px; font: 700 20px/1.1 var(--f-cond, 'Barlow Condensed', sans-serif); }
-.pc-grid { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin: 6px 0 0; font-size: 12.5px; }
-.pc-grid dt { color: var(--ink-3, #6B7880); }
-.pc-grid dd { margin: 0; text-align: right; font-weight: 600; }
-.pc-grid .pc-save { color: var(--ours-ink, #085E66); font-weight: 700; }
-.pc-reason { margin: 6px 0 0; font-size: 12px; color: var(--ink-2, #3E4C55); }
-.pc-decided { margin-top: 7px; font-size: 12px; color: var(--ink-2, #3E4C55); }
+.pc-offer-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pc-offer-name { font: 700 20px/1.1 var(--f-cond, 'Barlow Condensed', sans-serif); }
+.pc-offer-detail { margin-top: 3px; }
+.pc-offer-math { font-size: 12px; line-height: 1.4; color: var(--ink-2, #3E4C55); }
+.pc-save { color: var(--ours-ink, #155C38); font-weight: 700; }
+.pc-offer .pc-actions { margin-top: 7px; }
+.pc-decided { margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--ink-2, #3E4C55); }
 .pc-decided:empty { display: none; }
-.pc-ledger-wrap { margin-top: 8px; }
+.pc-ledger-wrap { margin-top: 6px; }
+.pc-ledger-wrap > summary { display: flex; gap: 6px; cursor: pointer; width: max-content; list-style: none; }
+.pc-ledger-wrap > summary::-webkit-details-marker { display: none; }
+.pc-ledger-wrap > summary::after { content: '+'; font-weight: 700; color: var(--ink-3, #6B7880); }
+.pc-ledger-wrap[open] > summary::after { content: '−'; }
+.pc-offer[data-status="accepted"] .pc-offer-top .pc-h { color: var(--ours-ink, #155C38); }
+.pc-offer[data-status="declined"] .pc-offer-top .pc-h { color: var(--asap-ink, #9C1C2D); }
 .pc-ledger { margin: 3px 0 0; padding-left: 16px; font-size: 11.5px; color: var(--ink-2, #3E4C55); }
 
 @media (prefers-reduced-motion: reduce) { .pc-wait::before, .pc-line { animation: none; } }

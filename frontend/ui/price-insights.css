@@ -65,12 +65,12 @@
 .pi-hcol.on { fill: var(--sheet-2, #EDF1F1); }
 .pi-day .pi-hcol.on { fill: rgba(23,35,43,.07); }
 .pi-hdot2.on { r: 4; }
-.pi-sb-ours { fill: var(--ours, #0B7A84); }
-.pi-sb-asap { fill: var(--asap, #EA5B1F); }
+.pi-sb-ours { fill: var(--ours, #1F7A4D); }
+.pi-sb-asap { fill: var(--asap, #C8283C); }
 .pi-hread { min-height: 32px; }
 .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
-.sw-ours { background: var(--ours, #0B7A84); }
-.sw-asap { background: var(--asap, #EA5B1F); }
+.sw-ours { background: var(--ours, #1F7A4D); }
+.sw-asap { background: var(--asap, #C8283C); }
 .pi-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair, rgba(23,35,43,.14)); font-size: 11.5px; color: var(--ink-2, #3E4C55); }
 .pi-totals div { display: flex; align-items: center; }
 .pi-totals b { margin-left: auto; font-family: var(--f-cond, sans-serif); font-size: 16px; font-weight: 600; color: var(--ink, #17232B); }

@@ -84,7 +84,7 @@ function canvasTexture(w, h, draw, repeat) {
 // ------------------------------------------------------------------ drawing-sheet markings
 // Floor paint, dimension lines and the title block use the page's engineering-sheet language:
 // slate ink, chilled-water teal, safety yellow. Smooth-filtered so lettering stays legible when zoomed.
-const SHEET = { ink: '#17232b', ink2: '#3e4c55', teal: '#0b7a84', yellow: '#f2be3a', orange: '#ea5b1f', vellum: '#e8ecec', sheet: '#f6f8f8' };
+const SHEET = { ink: '#17232b', ink2: '#3e4c55', teal: '#1F7A4D', yellow: '#f2be3a', orange: '#C8283C', vellum: '#e8ecec', sheet: '#f6f8f8' };
 const FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
 function markTexture(w, h, draw) {
   const cv = document.createElement('canvas');
@@ -201,8 +201,12 @@ export async function createDataCenter(containerEl) {
   const target = new THREE.Vector3(0, -7, 0);
   const home = target.clone();                              // whole-island framing
   const shot = { zone: null, pos: home.clone() };           // cinematic focus (focusZone), eased in frame()
-  const cam = { az: Math.PI / 4, azTarget: Math.PI / 4, el: 0.62, zoom: 1, zoomTarget: 1, dist: 160, drift: 0 };
+  const follow = { on: false };                              // camera rides along with the negotiator drone
+  let dayHold = false;                                       // provider sequence: keep the hall in daylight
+  // home: zoomTarget follows homeZoom() (island fills the stage) until a shot or the wheel takes over
+  const cam = { az: Math.PI / 4, azTarget: Math.PI / 4, el: 0.62, zoom: 1, zoomTarget: 1, dist: 160, drift: 0, home: true };
   const VIEW_H = 90; // world units visible vertically at zoom 1 (whole island + underside)
+  const FIT_MARGIN = 1.08; // home framing: island bounds + a little air
 
   // ---- lights
   const hemi = new THREE.HemisphereLight(0xfff6e6, 0x6b5a48, 0.9);
@@ -242,6 +246,12 @@ export async function createDataCenter(containerEl) {
   buildIsland(world, R);
   const outside = buildCampus(world, R, anim);
   const hall = buildHall(world, R, anim);
+
+  // home framing: corners of every visible mesh's bounds (the rock base tapers, so a single box
+  // would leave empty space under it), plus the steam plumes above the cooling towers
+  const fitPts = visiblePoints(world);
+  for (const x of [-31.5, -26]) for (const z of [-11, 2]) fitPts.push(new THREE.Vector3(x, 15, z));
+  new THREE.Box3().setFromPoints(fitPts).getCenter(home);
 
   // ================================================================ STATE + API
   const state = {
@@ -344,6 +354,32 @@ export async function createDataCenter(containerEl) {
   ro.observe(containerEl);
   resize();
 
+  /** Zoom + target at which the island just fills the stage from the current angle (cached per angle/size). */
+  let fitCache = null;
+  function homeFit() {
+    const key = `${w}x${h}:${cam.az.toFixed(4)}`;
+    if (fitCache?.key === key) return fitCache;
+    const sa = Math.sin(cam.az), ca = Math.cos(cam.az), se = Math.sin(cam.el), ce = Math.cos(cam.el);
+    const rx = sa, rz = -ca;                           // camera right (y = 0)
+    const ux = -se * ca, uy = ce, uz = -se * sa;       // camera up
+    let r0 = Infinity, r1 = -Infinity, u0 = Infinity, u1 = -Infinity;
+    for (const p of fitPts) {
+      const r = p.x * rx + p.z * rz, u = p.x * ux + p.y * uy + p.z * uz;
+      if (r < r0) r0 = r; if (r > r1) r1 = r;
+      if (u < u0) u0 = u; if (u > u1) u1 = u;
+    }
+    const aspect = w / h;
+    const need = Math.max(u1 - u0, (r1 - r0) / aspect) * FIT_MARGIN;
+    const rm = (r0 + r1) / 2, um = (u0 + u1) / 2;
+    fitCache = {
+      key,
+      zoom: Math.max(VIEW_H, 102 / aspect) / need,     // same units updateCamera() uses
+      center: new THREE.Vector3(rx * rm + ux * um, uy * um, rz * rm + uz * um),
+    };
+    return fitCache;
+  }
+  const homeZoom = () => homeFit().zoom;
+
   function updateCamera() {
     const aspect = w / h;
     const vh = VIEW_H / cam.zoom;
@@ -364,7 +400,7 @@ export async function createDataCenter(containerEl) {
   }
 
   function updateLighting() {
-    const hod = ((state.hour % 24) + 24) % 24;
+    const hod = dayHold ? 12 : ((state.hour % 24) + 24) % 24;   // provider sequence: hold at noon
     const elev = Math.sin(((hod - 6) / 12) * Math.PI);       // -1 midnight .. 1 noon
     const day = clamp01(elev * 1.4 + 0.25);
     const dusk = clamp01(1 - Math.abs(elev) * 3) * (day > 0.05 ? 1 : 0.4);
@@ -404,8 +440,13 @@ export async function createDataCenter(containerEl) {
     if (!state.paused) animT += dt;
     cam.drift += dt * 0.25;
     cam.az += (cam.azTarget - cam.az) * Math.min(1, dt * 6);
+    if (cam.home) { const f = homeFit(); cam.zoomTarget = f.zoom; shot.pos.copy(f.center); }
     cam.zoom += (cam.zoomTarget - cam.zoom) * Math.min(1, dt * (shot.zone ? 1.4 : 8));
-    target.lerp(shot.pos, Math.min(1, dt * 1.4));            // slow glide, no cuts
+    if (follow.on) {                                          // track the drone, ground-level so islands stay framed
+      const dp = providers.dronePos();
+      if (dp) shot.pos.set(dp.x, -3, dp.z);
+    }
+    target.lerp(shot.pos, Math.min(1, dt * (follow.on ? 2.2 : 1.4)));   // slow glide, no cuts
     updateCamera();
     for (const f of anim) f(animT, state.paused ? 0 : dt, state);
     hall.tick(animT, now / 1000, state);
@@ -421,6 +462,11 @@ export async function createDataCenter(containerEl) {
     renderer.render(postScene, postCam);
   }
   updateLighting();
+  {   // open already framed, no zoom-in on load
+    const f = homeFit();
+    cam.zoom = cam.zoomTarget = f.zoom;
+    target.copy(f.center); shot.pos.copy(f.center);
+  }
   raf = requestAnimationFrame(frame);
 
   // ---- input: drag to orbit, wheel to zoom, click a rack
@@ -452,7 +498,9 @@ export async function createDataCenter(containerEl) {
   };
   const onWheel = (e) => {
     e.preventDefault();
-    cam.zoomTarget = Math.max(0.7, Math.min(2.6, cam.zoomTarget * (e.deltaY > 0 ? 0.9 : 1.1)));
+    cam.home = false;
+    const maxZoom = Math.max(2.6, homeZoom() * 1.8);
+    cam.zoomTarget = Math.max(0.7, Math.min(maxZoom, cam.zoomTarget * (e.deltaY > 0 ? 0.9 : 1.1)));
   };
   function pickRack(e) {
     const rect = el.getBoundingClientRect();
@@ -468,7 +516,7 @@ export async function createDataCenter(containerEl) {
   el.addEventListener('wheel', onWheel, { passive: false });
 
   // ================================================================ public API
-  return {
+  const api = {
     setRackState(rackId, st) {
       const r = hall.byId.get(rackId);
       if (!r || !['online', 'offline', 'maintenance'].includes(st)) return;
@@ -516,25 +564,38 @@ export async function createDataCenter(containerEl) {
       const key = i < 0 ? null : zoneId;
       if (key === shot.zone) return;
       shot.zone = key;
-      if (key) { shot.pos.set(-2 * HALL_SCALE, 1, ROW_Z[i] * HALL_SCALE); cam.zoomTarget = 1.8; }
-      else { shot.pos.copy(home); cam.zoomTarget = 1; }
+      if (key) { shot.pos.set(-2 * HALL_SCALE, 1, ROW_Z[i] * HALL_SCALE); cam.home = false; cam.zoomTarget = Math.max(1.8, homeZoom() * 1.3); }
+      else { shot.pos.copy(home); cam.home = true; }
     },
     /** Float in one small data-center island per provider [{id, name}] and zoom out to fit. */
     showProviders(list = []) {
       providers.show(list);
       shot.zone = null; shot.pos.copy(home);
-      cam.zoomTarget = 0.55;
+      cam.home = false; cam.zoomTarget = 0.55;
+      dayHold = true; updateLighting();           // bright daylight for the negotiation
     },
     hideProviders() {
       providers.hide();
-      cam.zoomTarget = 1;
+      follow.on = false; shot.zone = null; shot.pos.copy(home);
+      cam.home = true;
+      dayHold = false; updateLighting();          // back to the week's own clock
     },
     /** 'idle' | 'talking' | 'deal' | 'no_deal' */
     setProviderState(id, st) { providers.setState(id, st); },
     /** Drone flies from the hall to the provider; resolves on arrival. */
-    sendNegotiator(id) { return providers.fly(id, true); },
+    sendNegotiator(id) {
+      follow.on = true; shot.zone = null;
+      cam.home = false; cam.zoomTarget = 0.95;                      // close enough that the provider island fills the frame on arrival
+      return providers.fly(id, true);
+    },
     /** Drone flies back to the hall; resolves on arrival. */
-    returnNegotiator() { return providers.fly(null, false); },
+    returnNegotiator() {
+      follow.on = true; cam.home = false; cam.zoomTarget = 0.7;
+      return providers.fly(null, false).then((v) => {
+        follow.on = false; shot.pos.copy(home); cam.zoomTarget = 0.55;   // glide back to the main island, all islands in view
+        return v;
+      });
+    },
     setPaused(p) { state.paused = !!p; },
     onRackClick(cb) { state.clickCb = typeof cb === 'function' ? cb : null; },
     getRackIds() { return hall.racks.map(r => r.id); },
@@ -554,6 +615,38 @@ export async function createDataCenter(containerEl) {
       el.remove();
     },
   };
+  // preview only: ?drone=1 plays the provider sequence by itself (show, fly to each, come back, hide)
+  try {
+    if (new URLSearchParams(location.search).get('drone') === '1') {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      (async () => {
+        await wait(800);
+        api.showProviders([{ id: 'nebius', name: 'Nebius' }, { id: 'coreweave', name: 'CoreWeave' }]);
+        for (const id of ['nebius', 'coreweave']) {
+          await wait(1200); api.setProviderState(id, 'talking');
+          await api.sendNegotiator(id); await wait(1500);
+          api.setProviderState(id, 'deal'); await api.returnNegotiator();
+        }
+      })();
+    }
+  } catch { /* preview only */ }
+  return api;
+}
+
+/** World-space bounding-box corners of the meshes that actually render (hidden extras don't count). */
+function visiblePoints(root) {
+  const pts = [], b = new THREE.Box3();
+  root.updateMatrixWorld(true);
+  root.traverseVisible((o) => {
+    if (!o.isMesh) return;
+    if (o.isInstancedMesh) { o.computeBoundingBox(); b.copy(o.boundingBox); }
+    else { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); b.copy(o.geometry.boundingBox); }
+    for (let i = 0; i < 8; i++) {
+      pts.push(new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z)
+        .applyMatrix4(o.matrixWorld));
+    }
+  });
+  return pts;
 }
 
 // ================================================================== ISLAND
@@ -1111,7 +1204,7 @@ function buildHall(parent, R, anim) {
   // signage + louvres on each wall (children follow the wall's cutaway)
   const sign = canvasTexture(128, 32, (c, w, h) => {
     c.fillStyle = '#17232b'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#0b7a84'; c.fillRect(0, h - 3, w, 3);
+    c.fillStyle = '#1F7A4D'; c.fillRect(0, h - 3, w, 3);
     c.fillStyle = '#f7f4ec'; c.font = 'bold 15px monospace'; c.textBaseline = 'middle';
     c.fillText('HALL 01 · 1,280 H100', 6, h / 2 - 1);
   });
@@ -1527,6 +1620,8 @@ function createProviders(scene) {
   }
 
   return {
+    /** world position of the drone (or null when it isn't flying) */
+    dronePos() { return drone.visible ? drone.position : null; },
     show(list) {
       list.forEach((p, i) => {
         if (islands.has(p.id)) { islands.get(p.id).dying = 0; return; }
