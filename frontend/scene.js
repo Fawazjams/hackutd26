@@ -8,13 +8,13 @@ import * as THREE from 'three';
 // ------------------------------------------------------------------ palette (matches styles.css)
 const C = {
   ink: 0x1b1b1b,
-  grass: 0x7fae4e, grassDark: 0x5f8f3a, soil: 0x7a5236, soilDark: 0x5b3b27, rock: 0x6f6a66, rockDark: 0x4d4946,
-  concrete: 0xd9d3c5, concreteDark: 0xb9b2a3, wall: 0xefe9dc, wallTrim: 0xc9c1b0,
-  floor: 0xe4dfd3, floorLine: 0xc8c1b2, cold: 0x9cc7e6, hot: 0xf0b48a,
+  grass: 0x8da37a, grassDark: 0x6c8766, soil: 0x7b6b5e, soilDark: 0x574b44, rock: 0x5f696e, rockDark: 0x444e54,
+  concrete: 0xd8dcda, concreteDark: 0xb4bcbc, wall: 0xeef1ef, wallTrim: 0xbfc8ca,
+  floor: 0xe3e7e6, floorLine: 0xc6cecf, cold: 0x9cc7e6, hot: 0xf0b48a,
   rack: 0x24272c, rackTop: 0x34383f, rackDark: 0x3a3a3a,
   led: 0x8cff5a, ledOff: 0x222222, red: 0xff3b2e, amber: 0xf2a33a, amberHot: 0xffc14d,
-  steel: 0x9aa3ab, steelDark: 0x6c757d, yellow: 0xf2c230, busway: 0x2c2f33,
-  white: 0xf7f4ec, glass: 0xbfd9e6, pine: 0x3f7a4a, pineDark: 0x2f5f3a, trunk: 0x6b4a2f,
+  steel: 0x9aa3ab, steelDark: 0x6c757d, yellow: 0xf2be3a, busway: 0x2c2f33,
+  white: 0xf7f4ec, glass: 0xbfd9e6, pine: 0x3d6b5b, pineDark: 0x2c4f47, trunk: 0x5c4a3e,
   truck: 0xe8572e, ours: 0x76b900, skin: 0xe9b48a, vest: 0xf28c28, shirt: 0x3f6fb0,
   zone: { Z1: 0x3f6fb0, Z2: 0xc4912a, Z3: 0x8463b4, Z4: 0x2f8f7b },
 };
@@ -75,6 +75,49 @@ function canvasTexture(w, h, draw, repeat) {
   return tex;
 }
 
+// ------------------------------------------------------------------ drawing-sheet markings
+// Floor paint, dimension lines and the title block use the page's engineering-sheet language:
+// slate ink, chilled-water teal, safety yellow. Smooth-filtered so lettering stays legible when zoomed.
+const SHEET = { ink: '#17232b', ink2: '#3e4c55', teal: '#0b7a84', yellow: '#f2be3a', orange: '#ea5b1f', vellum: '#e8ecec', sheet: '#f6f8f8' };
+const FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
+function markTexture(w, h, draw) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  draw(cv.getContext('2d'), w, h);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+function decal(w, d, tex, x, y, z, parent) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
+    new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.04, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; m.renderOrder = 1;
+  parent.add(m);
+  return m;
+}
+function hazard(c, x, y, w, h, step) {
+  c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip();
+  c.fillStyle = SHEET.yellow; c.fillRect(x, y, w, h);
+  c.fillStyle = SHEET.ink;
+  for (let k = -h; k < w + h; k += step * 2) {
+    c.beginPath(); c.moveTo(x + k, y + h); c.lineTo(x + k + step, y + h); c.lineTo(x + k + step + h, y); c.lineTo(x + k + h, y); c.fill();
+  }
+  c.restore();
+}
+// yellow/black striped ring painted round a unit under maintenance (shared by every ring)
+let ringMat = null;
+function maintRing(w, d, parent) {
+  ringMat ??= new THREE.MeshLambertMaterial({
+    map: markTexture(128, 128, (c, W, H) => { hazard(c, 0, 0, W, H, 9); c.clearRect(14, 14, W - 28, H - 28); }),
+    alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ringMat);
+  m.rotation.x = -Math.PI / 2; m.receiveShadow = true; m.visible = false;
+  parent.add(m);
+  return m;
+}
+
 // ------------------------------------------------------------------ pixel-art post pass
 const POST_VERT = /* glsl */`
   varying vec2 vUv;
@@ -122,8 +165,8 @@ const POST_FRAG = /* glsl */`
       float levels = 14.0;
       s += bayer(gl_FragCoord.xy) / levels;
       s = floor(s * levels + 0.5) / levels;
-      // warm print tint so it sits on the cream page
-      s = mix(s, s * vec3(1.03, 1.0, 0.95), 0.6);
+      // cool print tint so it sits on the vellum page
+      s = mix(s, s * vec3(0.98, 1.0, 1.01), 0.6);
       c.rgb = pow(clamp(s, 0.0, 1.0), vec3(2.2));
     }
     gl_FragColor = c;
@@ -133,6 +176,9 @@ const POST_FRAG = /* glsl */`
 
 // ------------------------------------------------------------------ main entry
 export async function createDataCenter(containerEl) {
+  try {   // drawing-sheet lettering is painted into canvases; give the webfont a moment to arrive
+    await Promise.race([document.fonts.load(`700 40px ${FONT}`), new Promise(r => setTimeout(r, 800))]);
+  } catch { /* fall back to the system face */ }
   const R = rng(42);
   const scene = new THREE.Scene();
 
@@ -171,7 +217,7 @@ export async function createDataCenter(containerEl) {
     material: new THREE.ShaderMaterial({
       uniforms: {
         tColor: { value: null }, tDepth: { value: null }, texel: { value: new THREE.Vector2() },
-        outlines: { value: 1 }, palette: { value: 0 }, inkColor: { value: new THREE.Color(0x2a2522) },
+        outlines: { value: 1 }, palette: { value: 0 }, inkColor: { value: new THREE.Color(0x17232b) },
       },
       vertexShader: POST_VERT, fragmentShader: POST_FRAG, transparent: true, depthTest: false, depthWrite: false,
     }),
@@ -209,6 +255,7 @@ export async function createDataCenter(containerEl) {
     r.ledMat.emissive.setHex(on ? C.led : C.ledOff);
     r.status.material.emissive.setHex(on ? C.led : mnt ? C.amberHot : C.red);
     r.beacon.visible = mnt;
+    r.ring.visible = mnt;
   }
 
   // equipment ids from the backlog and Nemotron vary ("PDU row B", "Fiber spine 4", "CRAC-2"...)
@@ -234,6 +281,7 @@ export async function createDataCenter(containerEl) {
     const on = st === 'maintenance';
     e.beacon.visible = on;
     e.tech.visible = on;
+    if (e.ring) e.ring.visible = on;
     for (const m of e.tint) m.emissive.setHex(on ? 0x4a2600 : 0x000000);
   }
 
@@ -333,7 +381,7 @@ export async function createDataCenter(containerEl) {
   function frame(now) {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));   // never negative (first frame / clock skew)
     last = now;
     if (!state.paused) animT += dt;
     cam.drift += dt * 0.25;
@@ -445,6 +493,8 @@ export async function createDataCenter(containerEl) {
     setPaused(p) { state.paused = !!p; },
     onRackClick(cb) { state.clickCb = typeof cb === 'function' ? cb : null; },
     getRackIds() { return hall.racks.map(r => r.id); },
+    /** floating labels were removed; kept as a no-op so callers stay safe */
+    setLabels() {},
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);
@@ -473,7 +523,7 @@ function buildIsland(parent, R) {
   // visible cliff face first (same footprint as the grass), then strata tapering to a point
   const layers = [
     [W, 1.6, D, C.soil, -2.0],
-    [W - 0.6, 1.2, D - 0.6, 0x8a6142, -3.4],
+    [W - 0.6, 1.2, D - 0.6, 0x8a796b, -3.4],
     [W - 1.4, 1.8, D - 1.4, C.soilDark, -4.9],
     [W - 6, 2.4, D - 6, C.rock, -7.0],
     [W - 14, 2.6, D - 13, C.rockDark, -9.5],
@@ -503,6 +553,29 @@ function buildIsland(parent, R) {
     box(0.3, 1.2 + R() * 1.2, 0.3, mat(C.soilDark), x, -6.6 - R(), z, g).castShadow = false;
   }
   box(0.35, 4, 0.35, mat(C.yellow), 22, -6.5, D / 2 - 3.7, g);
+  // engraved title block on the cliff face, like the corner of a facilities drawing
+  const tbTex = markTexture(1040, 192, (c, w, h) => {
+    c.fillStyle = SHEET.sheet; c.fillRect(0, 0, w, h);
+    c.strokeStyle = SHEET.ink; c.lineWidth = 8; c.strokeRect(4, 4, w - 8, h - 8);
+    c.lineWidth = 2.5;
+    const col = 700, mid = 112;
+    c.beginPath(); c.moveTo(col, 8); c.lineTo(col, h - 8); c.moveTo(8, mid); c.lineTo(w - 8, mid);
+    c.moveTo(col + 170, mid); c.lineTo(col + 170, h - 8); c.stroke();
+    c.fillStyle = SHEET.teal; c.fillRect(8, 8, 18, mid - 8);
+    c.fillStyle = SHEET.ink; c.textBaseline = 'middle';
+    c.font = `700 70px ${FONT}`; c.fillText('GPU HALL 01  MAINTENANCE PLAN', 44, mid / 2 + 4, col - 70);
+    c.font = `600 40px ${FONT}`; c.fillStyle = SHEET.ink2;
+    c.fillText('1,280 × H100,  4 ZONES,  40 RACKS', 44, mid + (h - mid) / 2 + 2, col - 70);
+    c.font = `500 26px ${FONT}`; c.fillText('DRAWING', col + 22, 32);
+    c.font = `700 62px ${FONT}`; c.fillStyle = SHEET.ink; c.fillText('M-101', col + 22, 76);
+    c.font = `500 26px ${FONT}`; c.fillStyle = SHEET.ink2; c.fillText('SCALE', col + 22, mid + 24); c.fillText('REV', col + 192, mid + 24);
+    c.font = `700 36px ${FONT}`; c.fillStyle = SHEET.ink; c.fillText('1 : 200', col + 22, mid + 56); c.fillText('C', col + 192, mid + 56);
+  });
+  const side = mat(0x2b363d);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(16.25, 3.0, 0.14),
+    [side, side, side, side, new THREE.MeshLambertMaterial({ map: tbTex, emissive: 0xffffff, emissiveMap: tbTex, emissiveIntensity: 0.12 }), side]);
+  plate.position.set(-9, -2.55, D / 2 + 0.08);
+  g.add(plate);
   return g;
 }
 
@@ -515,6 +588,35 @@ function buildCampus(parent, R, anim) {
 
   // concrete apron + paths
   box(36, 0.3, 26, mat(C.concrete), 0, 0.15, 0, g);
+  // dimension lines + survey ticks on the apron margin around the hall, in drawing ink
+  {
+    const PX = 32, AW = 36, AD = 26;
+    const X = (x) => (x + AW / 2) * PX, Z = (z) => (z + AD / 2) * PX;
+    const tex = markTexture(AW * PX, AD * PX, (c) => {
+      c.strokeStyle = SHEET.ink; c.fillStyle = SHEET.ink; c.lineWidth = 2;
+      const tick = (x, z) => { c.beginPath(); c.moveTo(x - 7, z + 7); c.lineTo(x + 7, z - 7); c.stroke(); };
+      const ext = (x1, z1, x2, z2) => { c.beginPath(); c.moveTo(x1, z1); c.lineTo(x2, z2); c.stroke(); };
+      // south: overall hall length
+      const zs = Z(12.25);
+      ext(X(-16), Z(11.45), X(-16), Z(12.7)); ext(X(16), Z(11.45), X(16), Z(12.7)); ext(X(-16), zs, X(16), zs);
+      tick(X(-16), zs); tick(X(16), zs);
+      c.font = `700 ${0.9 * PX}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'bottom';
+      const label = (txt, x, z) => { const m = c.measureText(txt).width + 12; c.fillStyle = SHEET.vellum; c.fillRect(x - m / 2, z - 0.95 * PX, m, 0.9 * PX); c.fillStyle = SHEET.ink; c.fillText(txt, x, z - 4); };
+      label('32 000', X(-2), zs + 0.45 * PX);
+      // east: overall hall width (text runs along the line)
+      const xe = X(17.2);
+      ext(X(16.45), Z(-11), X(17.7), Z(-11)); ext(X(16.45), Z(11), X(17.7), Z(11)); ext(xe, Z(-11), xe, Z(11));
+      tick(xe, Z(-11)); tick(xe, Z(11));
+      c.save(); c.translate(xe, Z(0)); c.rotate(-Math.PI / 2); label('22 000', 0, 0.45 * PX); c.restore();
+      // teal datum crosses at the apron corners (chilled-water teal = our plan's colour)
+      c.strokeStyle = SHEET.teal; c.lineWidth = 3;
+      for (const [x, z] of [[-17.2, -12.2], [17.2, -12.2], [-17.2, 12.2], [17.2, 12.2]]) {
+        ext(X(x) - 12, Z(z), X(x) + 12, Z(z)); ext(X(x), Z(z) - 12, X(x), Z(z) + 12);
+        c.beginPath(); c.arc(X(x), Z(z), 7, 0, Math.PI * 2); c.stroke();
+      }
+    });
+    decal(AW, AD, tex, 0, 0.305, 0, g);
+  }
   box(4, 0.25, 12, mat(C.concreteDark), 6, 0.12, 19, g);        // drive to loading dock
   box(26, 0.22, 3, mat(C.concreteDark), -14, 0.11, 15, g);       // footpath
   box(3, 0.22, 10, mat(C.concreteDark), 21, 0.11, 2, g);         // path to generators
@@ -540,7 +642,7 @@ function buildCampus(parent, R, anim) {
   // ---- cooling towers (west) with vapour
   const steam = [];
   const steamGeo = new THREE.BoxGeometry(1, 1, 1);
-  const steamMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+  const steamMat = new THREE.MeshLambertMaterial({ color: 0xf4f6f5, transparent: true, opacity: 0.55, depthWrite: false });
   const steamMesh = new THREE.InstancedMesh(steamGeo, steamMat, 60);
   steamMesh.castShadow = false;
   g.add(steamMesh);
@@ -552,7 +654,7 @@ function buildCampus(parent, R, anim) {
     cyl(2.7, 2.7, 0.5, mat(C.steel), x, 6.6, z, g, 8);
     cyl(1.4, 1.4, 0.3, mat(C.steelDark), x, 6.95, z, g, 10);
   }
-  for (let i = 0; i < 60; i++) steam.push({ tw: i % 2, t: R(), ox: (R() - 0.5) * 2, oz: (R() - 0.5) * 2, s: 0.8 + R() * 1.2 });
+  for (let i = 0; i < 60; i++) steam.push({ tw: i % 2, t: R(), ox: (R() - 0.5) * 2, oz: (R() - 0.5) * 2, s: 0.6 + R() * 0.7 });
   const dummy = new THREE.Object3D();
 
   // ---- diesel generators + fuel tank (east)
@@ -704,12 +806,13 @@ function buildCampus(parent, R, anim) {
     for (const f of fans) f.rotation.y += dt * 9;
     // steam: rise, drift, grow, fade (scale to 0)
     steam.forEach((s, i) => {
-      s.t += dt * 0.18;
-      if (s.t > 1) s.t -= 1;
+      // wrap with modulo (a long frame gap or a time jump must never push t past 1:
+      // the (1 - t²) fade would go negative and blow a puff up over the whole island)
+      s.t = (((s.t + Math.min(Math.max(dt, 0), 0.25) * 0.18) % 1) + 1) % 1;
       const [x, z] = towers[s.tw];
       dummy.position.set(x + s.ox + s.t * 3.5, 7.3 + s.t * 9, z + s.oz - s.t * 1.5);
       dummy.rotation.set(s.t * 2, s.t * 3, 0);
-      dummy.scale.setScalar(s.s * (0.6 + s.t * 1.8) * (1 - s.t * s.t));
+      dummy.scale.setScalar(Math.min(1.6, Math.max(0, s.s * (0.6 + s.t * 1.8) * (1 - s.t * s.t))));
       dummy.updateMatrix();
       steamMesh.setMatrixAt(i, dummy.matrix);
     });
@@ -758,8 +861,8 @@ function buildHall(parent, R, anim) {
   // slab + raised floor with tile grid
   box(W + 0.6, 0.6, D + 0.6, mat(C.concreteDark), 0, 0.3, 0, g);
   const tileTex = canvasTexture(16, 16, (c, w, h) => {
-    c.fillStyle = '#e4dfd3'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#cfc8b8'; c.fillRect(0, 0, w, 1); c.fillRect(0, 0, 1, h);
+    c.fillStyle = '#e3e7e6'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#c9d1d2'; c.fillRect(0, 0, w, 1); c.fillRect(0, 0, 1, h);
   }, [W / 1.2, D / 1.2]);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshLambertMaterial({ map: tileTex }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = 0.61; floor.receiveShadow = true;
@@ -794,6 +897,35 @@ function buildHall(parent, R, anim) {
     return { zn, m, heatLight };
   });
 
+  // ---- floor paint: row grid bubbles A-D, zone chips Z1-Z4, hazard striping at the hot-aisle doors
+  {
+    const PX = 40, cw = W * PX, ch = D * PX;
+    const X = (x) => (x - x0) * PX, Z = (z) => (z - z0) * PX;
+    const tex = markTexture(cw, ch, (c) => {
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      ROWS.split('').forEach((row, i) => {
+        const z = ROW_Z[i];
+        // grid bubble between the row end and its CDU
+        c.strokeStyle = SHEET.ink; c.fillStyle = SHEET.sheet; c.lineWidth = 3;
+        c.beginPath(); c.arc(X(8.33), Z(z), 0.4 * PX, 0, Math.PI * 2); c.fill(); c.stroke();
+        c.fillStyle = SHEET.ink; c.font = `700 ${0.56 * PX}px ${FONT}`;
+        c.fillText(row, X(8.33), Z(z) + 1.5);
+        // zone chip in the east service corridor, same colours as the UI chips
+        const zc = '#' + C.zone[ZONES[i]].toString(16).padStart(6, '0');
+        c.fillStyle = zc; c.beginPath(); c.roundRect(X(10.35), Z(z - 0.42), 1.15 * PX, 0.84 * PX, 5); c.fill();
+        c.fillStyle = SHEET.sheet; c.font = `700 ${0.62 * PX}px ${FONT}`;
+        c.fillText(ZONES[i], X(10.925), Z(z) + 1.5);
+      });
+      // safety striping across both hot-aisle containment doors
+      hazard(c, X(8.45), Z(-1.3), 0.55 * PX, 2.6 * PX, 9);
+      hazard(c, X(-12.95), Z(-1.3), 0.55 * PX, 2.6 * PX, 9);
+      // painted keep-clear box in front of the UPS room door
+      c.strokeStyle = SHEET.yellow; c.lineWidth = 5;
+      c.strokeRect(X(11.8), Z(-3.9), 3.6 * PX, 1.6 * PX);
+    });
+    decal(W, D, tex, 0, Y + 0.02, 0, g);
+  }
+
   // ---- racks
   const dots = canvasTexture(16, 32, (c, w, h) => {
     c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
@@ -825,7 +957,9 @@ function buildHall(parent, R, anim) {
       beacon.position.set(x, Y + RACK.h + 0.3, z);
       beacon.visible = false;
       g.add(beacon);
-      const r = { id, row: ri, zone: ZONES[ri], x, z, body, ledMat, status, beacon, state: 'online', phase: R() * 10, speed: 1.5 + R() * 3 };
+      const ring = maintRing(1.95, 2.6, g);
+      ring.position.set(x, Y + 0.025, z);
+      const r = { id, row: ri, zone: ZONES[ri], x, z, body, ledMat, status, beacon, ring, state: 'online', phase: R() * 10, speed: 1.5 + R() * 3 };
       body.userData.rack = r;
       racks.push(r); byId.set(id, r); pickables.push(body);
     }
@@ -845,7 +979,9 @@ function buildHall(parent, R, anim) {
   // ---- equipment: CRAC units on the west wall (one per zone), PDUs at row west ends,
   // CDUs at row east ends, UPS room (south-east), NOC (north-east)
   const equipment = new Map();
-  function addEquip(key, group, tintMats, beaconY, techPos) {
+  function addEquip(key, group, tintMats, beaconY, techPos, ringWD) {
+    const ring = maintRing(ringWD[0], ringWD[1], g);
+    ring.position.set(group.position.x, Y + 0.025, group.position.z);
     const beacon = new THREE.Group();
     cyl(0.22, 0.26, 0.36, beaconMat, 0, 0, 0, beacon, 8).castShadow = false;
     beacon.position.copy(group.position).add(new THREE.Vector3(0, beaconY, 0));
@@ -855,7 +991,7 @@ function buildHall(parent, R, anim) {
     tech.position.set(techPos[0], Y, techPos[1]);
     tech.visible = false;
     g.add(tech);
-    equipment.set(key, { state: 'normal', beacon, tech, tint: tintMats });
+    equipment.set(key, { state: 'normal', beacon, tech, ring, tint: tintMats });
   }
   const cracFans = [];
   ZONES.forEach((zn, i) => {
@@ -868,7 +1004,7 @@ function buildHall(parent, R, anim) {
     const fan = box(0.08, 0.2, 1.6, mat(C.steelDark), 0.86, 1.4, 0, grp);
     cracFans.push({ fan, key: `CRAC-${i + 1}` });
     g.add(grp);
-    addEquip(`CRAC-${i + 1}`, grp, [m], 3.7, [-13.2, ROW_Z[i] + 1.9]);
+    addEquip(`CRAC-${i + 1}`, grp, [m], 3.7, [-13.2, ROW_Z[i] + 1.9], [2.3, 4.0]);
 
     const pdu = new THREE.Group();
     pdu.position.set(-12.6, Y, ROW_Z[i]);
@@ -876,7 +1012,7 @@ function buildHall(parent, R, anim) {
     box(0.9, 2.4, 1.4, pm, 0, 1.2, 0, pdu);
     box(0.6, 0.3, 0.05, mat(C.white, { emissive: 0x3f6fb0 }), 0, 1.9, 0.72, pdu);
     g.add(pdu);
-    addEquip(`PDU-${ROWS[i]}`, pdu, [pm], 2.7, [-12.6, ROW_Z[i] + 1.8]);
+    addEquip(`PDU-${ROWS[i]}`, pdu, [pm], 2.7, [-12.6, ROW_Z[i] + 1.8], [1.5, 2.1]);
 
     const cdu = new THREE.Group();
     cdu.position.set(9.4, Y, ROW_Z[i]);
@@ -885,7 +1021,7 @@ function buildHall(parent, R, anim) {
     cyl(0.14, 0.14, 2.6, mat(0x4a8fd1), 0.7, 1.3, -0.4, cdu, 6);
     cyl(0.14, 0.14, 2.6, mat(0xd1574a), 0.7, 1.3, 0.4, cdu, 6);
     g.add(cdu);
-    addEquip(`CDU-${i + 1}`, cdu, [cm], 2.9, [10.8, ROW_Z[i] + 1.2]);
+    addEquip(`CDU-${i + 1}`, cdu, [cm], 2.9, [10.8, ROW_Z[i] + 1.2], [2.0, 2.3]);
 
     equipment.set(`FIBER-${ROWS[i]}`, { state: 'normal', beacon: { visible: false }, tech: { visible: false }, tint: [], fiber: fiberTrays[i] });
   });
@@ -898,7 +1034,7 @@ function buildHall(parent, R, anim) {
     for (let j = -2; j <= 2; j++) box(1.2, 2.2, 0.9, um, 0, 1.1, j * 1.15, ups);
     box(1.0, 0.25, 0.05, mat(C.ink, { emissive: k ? 0x2f8f7b : 0x76b900 }), -0.62, 1.9, 0, ups).rotation.y = Math.PI / 2;
     g.add(ups);
-    addEquip(`UPS-${u}`, ups, [um], 2.6, [12.4, -4.2]);
+    addEquip(`UPS-${u}`, ups, [um], 2.6, [12.4, -4.2], [1.7, 6.4]);
   });
   // NOC desk with a glowing screen wall
   box(4, 1, 1.2, mat(0x6d5a48), 13.2, Y + 0.5, 6.5, g);
@@ -908,8 +1044,8 @@ function buildHall(parent, R, anim) {
 
   // ---- walls (dollhouse cutaway: walls facing the camera drop to knee height)
   const wallTex = canvasTexture(32, 32, (c, w, h) => {
-    c.fillStyle = '#efe9dc'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#e2dbcb'; for (let y = 0; y < h; y += 8) c.fillRect(0, y, w, 1);
+    c.fillStyle = '#eef1ef'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#dde3e3'; for (let y = 0; y < h; y += 8) c.fillRect(0, y, w, 1);
   }, [6, 1]);
   const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
   const walls = [
@@ -921,8 +1057,8 @@ function buildHall(parent, R, anim) {
   for (const wl of walls) { wl.k = 1; wl.base = wl.m.position.y; }
   // signage + louvres on each wall (children follow the wall's cutaway)
   const sign = canvasTexture(128, 32, (c, w, h) => {
-    c.fillStyle = '#1b1b1b'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#76b900'; c.fillRect(0, h - 3, w, 3);
+    c.fillStyle = '#17232b'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#0b7a84'; c.fillRect(0, h - 3, w, 3);
     c.fillStyle = '#f7f4ec'; c.font = 'bold 15px monospace'; c.textBaseline = 'middle';
     c.fillText('HALL 01 · 1,280 H100', 6, h / 2 - 1);
   });

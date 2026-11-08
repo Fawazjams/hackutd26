@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import agent, backlog, prices, simulate, stubs
+from . import agent, backlog, prices, rates, simulate, stubs
 from .models import Plan, PlanRequest
 from .planner import make_plan
 
@@ -39,7 +39,7 @@ def get_prices(days: int = 7) -> list[dict]:
     return stubs.prices(days)
 
 
-for r in (prices.router, backlog.router, simulate.router, agent.router):
+for r in (rates.router, prices.router, backlog.router, simulate.router, agent.router):
     app.include_router(r)
 
 # Serve the frontend at / (mounted last so API routes win).

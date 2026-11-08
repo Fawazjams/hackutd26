@@ -40,7 +40,7 @@
 
   /* layout */
   --left-w: 352px;
-  --panel-w: 292px;
+  --panel-w: 328px;
   --gutter: 20px;
   --r: 4px;
   color-scheme: light;
@@ -50,9 +50,7 @@
 html, body { height: 100%; }
 body {
   margin: 0;
-  background:
-    radial-gradient(ellipse 55% 55% at 56% 52%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 70%),
-    var(--sky);
+  background: var(--sky);
   color: var(--ink);
   font: 400 13px/1.45 var(--f-ui);
   font-variant-numeric: tabular-nums;
@@ -98,7 +96,7 @@ a { color: inherit; }
 
 .chip {
   display: inline-flex; align-items: center; gap: 7px; margin-top: 12px;
-  padding: 4px 9px; border-radius: 999px; border: 1px solid var(--hair); background: var(--sheet);
+  padding: 4px 9px; border-radius: 2px; border: 1px solid var(--rule); background: var(--sheet);
   font: 500 12px/1 var(--f-ui); color: var(--ink-2);
 }
 .chip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
@@ -185,8 +183,7 @@ a { color: inherit; }
 }
 .stage-top > * { pointer-events: auto; }
 .agent-callout, .newjob, .alarm {
-  background: var(--sheet); border: 1px solid var(--hair); border-radius: 8px;
-  box-shadow: 0 18px 36px -24px rgba(23, 35, 43, 0.5);
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 2px;
 }
 
 /* simulated alarm: safety orange, the only orange card on screen */
@@ -267,13 +264,44 @@ kbd {
   max-height: calc(100vh - var(--gutter) * 2 - 52px);
   overflow-y: auto; overscroll-behavior: contain;
   background: var(--sheet);
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  box-shadow: 0 24px 48px -36px rgba(23, 35, 43, 0.55);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
   scrollbar-width: thin; scrollbar-color: var(--ink-4) transparent;
 }
-.sec { padding: 14px 16px 15px; border-top: 1px solid var(--hair-2); }
+.sec { padding: 14px 16px; border-top: 1px solid var(--hair-2); }
 .sec:first-child { border-top: 0; }
+/* top block: two compact labelled rows */
+.sec-top { display: grid; gap: 6px; padding-top: 12px; padding-bottom: 12px; }
+.ctl-row { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 8px; }
+.ctl-label { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1.2 var(--f-ui); color: var(--ink); }
+.ctl-row .seg { margin-top: 0; }
+.ctl-row .seg button { height: 28px; }
+/* agent area sits on a faint tint so it reads as the place to act */
+.sec-ask { background: var(--sheet-2); }
+.sec-ask .ask.ap-live { background: var(--sheet); }
+.sec-ask .caption { display: none; }             /* the placeholder and the chips already say how */
+.panel .sec-ask .ap-chips { gap: 3px; }
+.panel .sec-ask .ap-chip { height: 24px; line-height: 22px; border-radius: 2px; }
+.panel .sec-ask .ap-alarm { margin-top: 8px; }
+.panel .sec-ask .ap-alarm-btn { height: 30px; }
+/* jobs: tighter rows, cost column aligned */
+.sec-jobs .ladder li { padding: 6px 6px 6px 14px; gap: 3px; }
+.sec-jobs .ladder .bar { top: 7px; bottom: 7px; }
+.sec-jobs .ladder .cost { min-width: 92px; text-align: right; }
+/* jobs list scrolls after ~4 rows so price and time stay above the fold */
+.sec-jobs .ladder { max-height: 196px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* view settings: collapsed by default */
+.sec-view { padding: 0; }
+.sec-view summary {
+  list-style: none; display: flex; align-items: center; justify-content: space-between;
+  height: 40px; padding: 0 16px; cursor: pointer;
+  font: 600 13px/1 var(--f-ui); color: var(--ink-2);
+}
+.sec-view summary::-webkit-details-marker { display: none; }
+.sec-view summary:hover { color: var(--ink); }
+.sec-view[open] .plus::after { transform: scaleY(0); }
+.view-body { padding: 0 16px 14px; }
+#price-credit { margin-top: 8px; }
 .sec-label {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   margin-bottom: 9px;
@@ -342,7 +370,7 @@ kbd {
 
 .pill {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px; border-radius: 999px;
+  padding: 2px 7px; border-radius: 2px;
   font: 600 11px/1.3 var(--f-ui); border: 1px solid var(--hair); color: var(--ink-3); background: transparent;
 }
 .pill.live { color: var(--sheet); background: var(--ink); border-color: var(--ink); }
@@ -430,8 +458,7 @@ kbd {
 .howto {
   position: fixed; z-index: 8; right: var(--gutter); bottom: var(--gutter);
   width: var(--panel-w);
-  background: var(--sheet); border: 1px solid var(--hair); border-radius: 8px;
-  box-shadow: 0 24px 48px -36px rgba(23, 35, 43, 0.55);
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 2px;
 }
 .howto summary {
   list-style: none; display: flex; align-items: center; justify-content: space-between;
@@ -446,7 +473,7 @@ kbd {
 .howto[open] .plus::after { transform: scaleY(0); }
 .howto-body { padding: 0 16px 16px; font-size: 13px; line-height: 1.5; color: var(--ink-2); max-height: 56vh; overflow-y: auto; }
 .howto-body p { margin: 10px 0 0; }
-.formula { padding: 10px 12px; border-radius: 6px; background: var(--ink); color: var(--sheet); font: 400 12.5px/1.6 var(--f-ui); }
+.formula { padding: 10px 12px; border-radius: 2px; background: var(--ink); color: var(--sheet); font: 400 12.5px/1.6 var(--f-ui); }
 .formula b { color: var(--amber); font-weight: 600; }
 .formula .plus-line { color: #C9D2D6; }
 .honest { padding: 8px 10px; border-left: 3px solid var(--amber); background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--ink); }
@@ -571,4 +598,64 @@ body.mode-cloud .private-only, body.mode-private .cloud-only { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ---------- Transport bar: play, clock, speed, week scrubber, across the top of the stage ---------- */
+:root { --tp-top: 20px; --tp-h: 122px; }
+#stage { top: calc(var(--tp-top) + var(--tp-h)); }
+.transport {
+  position: fixed; z-index: 6; top: var(--tp-top);
+  left: var(--left-w); right: calc(var(--panel-w) + var(--gutter) * 2);
+  height: var(--tp-h);
+  padding: 10px 14px 8px;
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 2px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tp-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.tp-row button {
+  height: 32px; padding: 0 12px; border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--sheet); font: 600 13px/1 var(--f-ui); color: var(--ink); white-space: nowrap;
+}
+.tp-row button:hover { border-color: var(--ink-3); }
+.tp-play { min-width: 92px; background: var(--ink) !important; color: var(--sheet) !important; border-color: var(--ink) !important; }
+.tp-clock { flex: none; min-width: 104px; font: 700 30px/1 var(--f-cond) !important; color: var(--ink) !important; letter-spacing: -0.01em; white-space: nowrap; }
+.tp-speed { margin: 0; grid-auto-flow: column; grid-auto-columns: 44px; gap: 3px; }
+.tp-speed button { padding: 0; }
+.tp-restart { width: 34px; padding: 0 !important; font-size: 16px !important; }
+.tp-legend { display: inline-flex; gap: 12px; margin-left: auto; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.tp-legend .sw { margin-right: 5px; vertical-align: -1px; }
+.tp-report { flex: none; }
+.tp-track { position: relative; min-width: 0; }
+.transport .gantt { margin-top: 2px; height: 46px; }
+.transport .slider { display: block; margin: 0 0 0 23px; width: calc(100% - 16px); }
+
+/* ---------- Panel tabs ---------- */
+.tabs {
+  position: sticky; top: 0; z-index: 2;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--sheet); border-bottom: 1px solid var(--rule);
+}
+.tabs [role="tab"] {
+  height: 40px; border: 0; background: transparent; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  font: 600 14px/1 var(--f-ui); color: var(--ink-3);
+}
+.tabs [role="tab"]:hover { color: var(--ink); }
+.tabs [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ours); }
+/* inactive panels stay laid out (so charts can measure their width) but take no space */
+.panel { position: fixed; }
+.tabpanel.off { position: absolute; left: 0; right: 0; top: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+.sec-ask { background: transparent; }
+.sec-jobs .ladder { max-height: none; }
+
+/* live run cards sit just under the transport bar */
+.stage-top { top: calc(var(--tp-top) + var(--tp-h) + 10px); }
+
+@media (max-width: 1180px) {
+  .tp-legend { display: none; }
+  .tp-clock { font-size: 26px !important; min-width: 90px; }
+}
+@media (max-width: 1000px) {
+  .transport { left: var(--gutter); right: var(--gutter); top: auto; bottom: var(--gutter); height: auto; }
+  #stage { top: 0; }
+  .ticker { display: none; }
 }
