@@ -16,7 +16,7 @@
 | Time | Screen | Say |
 |---|---|---|
 | 0:00–0:15 | Title → 3D hall | "When a GPU data center takes racks down for maintenance, nobody asks what those GPU-hours are worth that day. GPU compute now has a market price, and that price moves." |
-| 0:15–0:30 | Backlog panel + price forecast | "This is one week's backlog: CRAC compressor, PDU breakers, firmware, UPS test, fiber, coolant flush. Here's the H100 price forecast, a seeded curve based on public index levels." |
+| 0:15–0:30 | Backlog panel + price forecast | "This is one week's backlog: CRAC compressor, PDU breakers, firmware, UPS test, fiber, coolant flush. Here's the H100 price forecast, built from real GetDeploying market prices." |
 | 0:30–0:50 | Click **ASAP plan**, play week | "The usual way is to do it all ASAP. Watch Monday morning: the CRAC-2 replacement and the CDU-3 flush overlap in neighboring zones, both lose their backup cooling, and zones Z2 and Z3 **overheat**. The ASAP plan also costs **$[X]**." |
 | 0:50–1:15 | Click **Plan** (optimized), play week, $ counters side by side | "Our optimizer prices every hour of downtime in market dollars, factors in failure risk that grows while a task waits, and keeps cooling zones apart. Same backlog, **$[Y]**, so **$[X−Y] saved** this week with no overheating." |
 | 1:15–1:45 | Type request 1 into the agent box | "Now a new job comes in." *(type the UPS-B request)* "Nemotron turns it into a task and calls our tools: forecast, optimizer, simulator, and it re-plans if anything overheats. Every number it says comes from our code, not the model." |
@@ -31,7 +31,7 @@
 3. **Demo: plan (60 s).** Backlog → forecast → ASAP plan overheats Z2/Z3 Monday 09:00–12:00 → optimized plan: no violations, **$[X] saved**. Flip the mode switch to **Private DC**: same math, replacement cost instead of lost revenue and SLA.
 4. **Demo: Nemotron (50 s).** Run one rehearsed request, then hand the keyboard to a judge for the unscripted one. Point at the tool-call trace: "That's multiple steps with tool use. The LLM never computes a number."
 5. **How it works (20 s).** `cost(hour) = GPUs offline × utilization × price(day)` plus SLA; waiting cost = risk growth × unplanned failure cost. Seeded, so the same answer every time.
-6. **Honesty + close (10 s).** "Facility and backlog are simulated, assumptions are labeled in the repo, prices are a seeded curve. Plug in a live feed and real telemetry and this runs on a real hall."
+6. **Honesty + close (10 s).** "Facility and backlog are simulated, assumptions are labeled in the repo, prices are real weekly market data with our own forecast on top, and overheats are priced at an assumed outage rate. Plug in a live feed and real telemetry and this runs on a real hall."
 
 ---
 

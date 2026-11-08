@@ -564,3 +564,9 @@ body.mode-cloud .private-only, body.mode-private .cloud-only { display: none; }
 .sb-delta i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ours); box-shadow: 0 0 8px var(--ours); transition: width .3s; }
 .sb-clock { font-size: 15px; }
 .sb-saved b { font-size: 15px; }
+
+/* Overheat accents (ticker + summary) */
+.ticker .what b.heat { color: #d9432b; }
+.summary-grid .heat-row { font-weight: 600; }
+.summary-grid .heat-n.a { color: #d9432b; font-weight: 700; }
+.summary-grid .heat-n.o { color: #4f8a00; font-weight: 700; }

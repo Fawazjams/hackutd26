@@ -134,3 +134,15 @@ def test_thermal_check_separates_neighbor_cooling_outages():
     # Without the check both would start at hour 32 (zones differ, so no zone conflict).
     # Zones heat up gradually, so a short overlap can be safe; a full stack is not.
     assert len({i.start_hour for i in plan.items}) == 2
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_asap_overheats_are_priced_into_its_total(mode):
+    asap = make_plan(seeded_backlog(), mode, "asap")
+    opt = make_plan(seeded_backlog(), mode, "optimized")
+    assert opt.overheats == [] and opt.overheat_cost == 0
+    assert len(asap.overheats) == 5
+    assert asap.overheat_cost == pytest.approx(sum(o.cost for o in asap.overheats), abs=0.01)
+    items = sum(i.total for i in asap.items)
+    assert asap.total_cost == pytest.approx(items + asap.overheat_cost, abs=0.05)
+    assert all(o.temp_c > 32 and o.gpus_lost > 0 and o.cost > 0 for o in asap.overheats)

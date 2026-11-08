@@ -2,7 +2,8 @@
 // Loads the backlog, prices and both plans, plays the week forward in the 3D hall, and races
 // the $-lost counters for our plan vs ASAP. Every number on screen is computed from API data.
 
-import { loadAll } from './ui/api.js';
+import { loadAll, planWithTasks } from './ui/api.js';
+import { initAgentPanel } from './ui/agent-panel.js';
 import { HOURS, DAYS, hourLabel, money, num, pct, esc, shortName } from './ui/format.js';
 import { createPriceChart, createGantt } from './ui/charts.js';
 import { createPlaceholderHall } from './ui/placeholder-hall.js';
@@ -96,7 +97,7 @@ function prepare(raw) {
         perRack: racks.length ? it.gpus_offline / racks.length : 0,
       };
     });
-    plans[key] = { ...p, items, byTask: new Map(items.map(i => [i.task_id, i])) };
+    plans[key] = { ...p, items, overheats: p.overheats || [], byTask: new Map(items.map(i => [i.task_id, i])) };
   }
   const events = [{ h: 0, plan: null, kind: 'week', text: `Week starts · ${raw.backlog.length} jobs in the backlog` }];
   for (const key of ['optimized', 'asap']) {
@@ -104,19 +105,22 @@ function prepare(raw) {
       events.push({ h: it.start_hour, plan: key, kind: 'start', it });
       events.push({ h: it.end_hour, plan: key, kind: 'end', it });
     }
+    for (const oh of plans[key].overheats) events.push({ h: oh.hour, plan: key, kind: 'heat', oh });
   }
-  const order = { week: 0, end: 1, start: 2 };
+  const order = { week: 0, end: 1, heat: 2, start: 3 };
   events.sort((a, b) => a.h - b.h || order[a.kind] - order[b.kind] || (a.plan === 'optimized' ? -1 : 1));
   const perRackAny = plans.optimized.items.find(i => i.perRack)?.perRack
     ?? plans.asap.items.find(i => i.perRack)?.perRack ?? null;
   const equipment = [...new Set([...raw.backlog.map(t => t.equipment), ...EXTRA_EQUIPMENT])];
-  const maxTotal = Math.max(1, ...['optimized', 'asap'].map(k => plans[k].items.reduce((s, i) => s + i.total, 0)));
+  const maxTotal = Math.max(1, ...['optimized', 'asap'].map(k => plans[k].total_cost));
   return { raw, tasks, plans, events, perRack: perRackAny, equipment, maxTotal, offline: raw.offline };
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const active = (plan, t) => plan.items.filter(i => i.start_hour <= t && t < i.end_hour);
-const costAt = (plan, t) => plan.items.reduce((s, i) => s + i.total * clamp01((t - i.start_hour) / i.dur), 0);
+// Overheat zone-hours (priced as unplanned outages by the backend) accrue over their hour.
+const heatAt = (plan, t) => plan.overheats.reduce((s, o) => s + o.cost * clamp01(t - o.hour), 0);
+const costAt = (plan, t) => plan.items.reduce((s, i) => s + i.total * clamp01((t - i.start_hour) / i.dur), 0) + heatAt(plan, t);
 function gpusOff(plan, t) {
   const racks = new Map();
   for (const i of active(plan, t)) for (const r of i.racks) racks.set(r, i.perRack);
@@ -131,6 +135,7 @@ function settledSavings(t) {
     const ai = a.byTask.get(id);
     if (ai && t >= oi.end_hour && t >= ai.end_hour) { s += ai.total - oi.total; n++; }
   }
+  s += heatAt(a, t) - heatAt(o, t);  // an overheat is a loss the moment it happens
   return { s, n };
 }
 function isQuiet(t) {
@@ -148,6 +153,14 @@ async function loadMode(mode) {
   $('sb-mode').textContent = mode === 'cloud' ? 'GPU cloud · revenue + SLA' : 'Private DC · rental cost';
   const raw = await loadAll(mode);
   if (token !== S.loadToken) return;
+  applyRaw(raw);
+  if (BOOT.t) { S.t = Math.min(HOURS, BOOT.t); BOOT.t = 0; }
+  if (BOOT.paused) { setPlaying(false); BOOT.paused = false; }
+}
+
+// Render a {backlog, prices, plans, offline} bundle and restart the week.
+function applyRaw(raw) {
+  S.raw = raw;
   S.d = prepare(raw);
   $('offline-chip').hidden = !raw.offline;
   buildLadder();
@@ -155,8 +168,21 @@ async function loadMode(mode) {
   gantt = createGantt($('gantt'), S.d.plans, raw.backlog.map(t => t.id));
   gantt.select(S.selected);
   restart();
-  if (BOOT.t) { S.t = Math.min(HOURS, BOOT.t); BOOT.t = 0; }
-  if (BOOT.paused) { setPlaying(false); BOOT.paused = false; }
+}
+
+// Ask Nemotron panel (ui/agent-panel.js) sends the optimized plan incl. its new task.
+// The event has no ASAP plan, so ask /plan for ASAP over the same tasks; keep the old
+// ASAP plan if that fails (offline), so the scoreboard still plays.
+async function onAgentPlan(e) {
+  const { task, plan } = e.detail || {};
+  if (!task || !plan || !S.raw) return;
+  const mode = plan.mode || S.mode;
+  const backlog = [...S.raw.backlog.filter(t => t.id !== task.id), task];
+  let asap = S.raw.plans.asap;
+  try { asap = await planWithTasks(mode, 'asap', backlog); }
+  catch (err) { console.warn('[agent] ASAP re-plan failed, keeping previous ASAP plan:', err); }
+  S.selected = task.id;
+  applyRaw({ ...S.raw, backlog, plans: { optimized: plan, asap } });
 }
 
 function restart() {
@@ -314,7 +340,9 @@ function updateTicker() {
     const fresh = grew && idx === tail.length - 1 ? ' class="fresh"' : '';
     if (e.kind === 'week') return `<li${fresh}><time>${hourLabel(e.h)}</time><span class="what">${esc(e.text)}</span></li>`;
     const tag = `<span class="tag ${e.plan === 'optimized' ? 'ours' : 'asap'}">${e.plan === 'optimized' ? 'OURS' : 'ASAP'}</span>`;
-    const body = e.kind === 'start'
+    const body = e.kind === 'heat'
+      ? `<b class="heat">Zone ${esc(e.oh.zone)} overheated</b> · ${e.oh.temp_c.toFixed(1)} °C · ${num(e.oh.gpus_lost)} GPUs lost · ${money(e.oh.cost)}`
+      : e.kind === 'start'
       ? `<b>${esc(e.it.name)}</b> started · ${num(e.it.gpus_offline)} GPUs offline`
       : `<b>${esc(e.it.name)}</b> done · ${money(e.it.total)}`;
     return `<li${fresh}>${tag}<time>${hourLabel(e.h)}</time><span class="what">— ${body}</span></li>`;
@@ -342,8 +370,10 @@ function showSummary() {
   const done = p => p.items.length ? hourLabel(Math.max(...p.items.map(i => i.end_hour))) : '—';
   let html = `<div class="h"></div><div class="h n">Our plan</div><div class="h n">ASAP</div>`;
   for (const [label, f] of rows) html += `<div>${label}</div><div class="n o">${money(sum(o, f))}</div><div class="n a">${money(sum(a, f))}</div>`;
+  html += `<div>Overheat outages</div><div class="n o">${money(o.overheat_cost || 0)}</div><div class="n a">${money(a.overheat_cost || 0)}</div>`;
   html += `<div class="tot">Total</div><div class="n tot o">${money(o.total_cost)}</div><div class="n tot a">${money(a.total_cost)}</div>`;
   html += `<div>GPU-hours offline</div><div class="n">${num(Math.round(gh(o)))}</div><div class="n">${num(Math.round(gh(a)))}</div>`;
+  html += `<div class="heat-row">Overheats (zone-hours)</div><div class="n o heat-n">${o.overheats.length}</div><div class="n a heat-n">${a.overheats.length}</div>`;
   html += `<div>Last job finishes</div><div class="n">${done(o)}</div><div class="n">${done(a)}</div>`;
   $('summary-grid').innerHTML = html;
   const sameGH = Math.round(gh(o)) === Math.round(gh(a));
@@ -353,8 +383,12 @@ function showSummary() {
     sub.id = 'summary-card-sub'; sub.className = 'summary-sub';
     $('summary-title').after(sub);
   }
+  const heatShare = saved > 0 ? (a.overheat_cost - o.overheat_cost) / saved : 0;
   sub.textContent = `${o.items.length} jobs, ${cloud ? 'priced as lost revenue + SLA credits' : 'priced as replacement rental'}. `
-    + (sameGH ? 'Same work and the same GPU-hours offline — only the timing changed.' : 'Both plans obey the same windows and cooling-zone rules.');
+    + (sameGH ? 'Same work and the same GPU-hours offline — only the timing changed. ' : 'Both plans obey the same windows and cooling-zone rules. ')
+    + (a.overheats.length && !o.overheats.length
+      ? `ASAP overheated ${a.overheats.length} zone-hours; ours none. ${pct(heatShare)} of the savings is those overheats, priced as unplanned outages (assumed rate).`
+      : '');
   $('summary-swap').textContent = cloud ? 'Try Private DC mode' : 'Try GPU cloud mode';
   $('summary').hidden = false;
 }
@@ -528,6 +562,8 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   wireControls();
   pushView();
   initHall();
+  initAgentPanel();
+  window.addEventListener('agent:plan', onAgentPlan);
   loadMode(S.mode);
   requestAnimationFrame(frame);
 })();

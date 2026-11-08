@@ -62,12 +62,25 @@ class Unscheduled(BaseModel):
     reason: str
 
 
+class OverheatHour(BaseModel):
+    """One zone-hour over the thermal limit in the hall sim, priced as an unplanned outage."""
+
+    hour: int
+    zone: str
+    temp_c: float
+    gpus_lost: int  # GPUs still running in that zone that hour (assumed lost to the overheat)
+    cost: float
+
+
 class Plan(BaseModel):
     mode: Mode
     strategy: Strategy
-    total_cost: float
+    total_cost: float  # sum of item totals + overheat_cost
     items: list[PlanItem]
     unscheduled: list[Unscheduled] = []
+    # Optional (added): overheats the hall sim finds in this plan. Always empty for "optimized".
+    overheat_cost: float = 0.0
+    overheats: list[OverheatHour] = []
 
 
 class PlanRequest(BaseModel):

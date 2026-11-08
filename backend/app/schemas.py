@@ -5,7 +5,8 @@ shapes for /cost, /simulate and /request. Change carefully: add optional fields,
 from pydantic import BaseModel
 
 from .models import (  # noqa: F401  (re-exported)
-    HOURS_IN_WEEK, Mode, Plan, PlanItem, PlanRequest, Strategy, Task, Unscheduled, Window, hour_label,
+    HOURS_IN_WEEK, Mode, OverheatHour, Plan, PlanItem, PlanRequest, Strategy, Task, Unscheduled, Window,
+    hour_label,
 )
 
 

@@ -17,16 +17,26 @@ drop it back in its cheapest open slot until nothing gets cheaper. The improve
 step is also run starting from the ASAP plan when that plan is thermally clean;
 the cheaper clean result wins.
 
+Overheats are priced: for every zone-hour the hall sim puts over the limit, the GPUs
+still running in that zone count as an unplanned outage for that hour, at the same
+assumed rate the risk model uses (UNPLANNED_MULTIPLIER x (1 + EMERGENCY_PREMIUM) x
+planned cost). Only ASAP can have these; they are added to its total_cost.
+
 Everything is deterministic: ties go to the earliest hour, then task id.
 """
 
 from collections.abc import Callable
 
+from .config import OVERHEAT_C, ZONE_RACKS
 from .models import (
-    HOURS_IN_WEEK, Mode, Plan, PlanItem, PlanRequest, Strategy, Task, Unscheduled, hour_label,
+    HOURS_IN_WEEK, Mode, OverheatHour, Plan, PlanItem, PlanRequest, Strategy, Task, Unscheduled,
+    hour_label,
 )
 from .simulate import is_cooling_task, simulate_plan
-from .stubs import GPUS_PER_RACK, CostBreakdown, seeded_backlog, slot_cost
+from .stubs import (
+    CONTRACTED_SHARE, EMERGENCY_PREMIUM, GPUS_PER_RACK, SLA_CREDIT_RATE, UNPLANNED_MULTIPLIER,
+    CostBreakdown, price, seeded_backlog, slot_cost, utilization,
+)
 
 CostFn = Callable[[Task, int, Mode], CostBreakdown]
 Schedule = dict[str, int]  # task_id -> start_hour
@@ -79,18 +89,39 @@ class _Planner:
         }
         self._heat_cache: dict[frozenset, bool] = {}
 
+    def _simulate(self, schedule: Schedule):
+        items = [
+            PlanItem.model_construct(task_id=tid, start_hour=s,
+                                     end_hour=s + self.by_id[tid].duration_hrs)
+            for tid, s in sorted(schedule.items())
+        ]
+        return simulate_plan(Plan.model_construct(items=items), self.by_id)
+
     def overheats(self, schedule: Schedule) -> bool:
         """True if the hall thermal sim reports any overheat for this schedule."""
         key = frozenset(schedule.items())
         if key not in self._heat_cache:
-            items = [
-                PlanItem.model_construct(task_id=tid, start_hour=s,
-                                         end_hour=s + self.by_id[tid].duration_hrs)
-                for tid, s in sorted(schedule.items())
-            ]
-            sim = simulate_plan(Plan.model_construct(items=items), self.by_id)
+            sim = self._simulate(schedule)
             self._heat_cache[key] = any(v.kind == "overheat" for v in sim.violations)
         return self._heat_cache[key]
+
+    def overheat_hours(self, schedule: Schedule) -> list[OverheatHour]:
+        """Every zone-hour over the limit, priced as an unplanned outage of its running GPUs."""
+        if not self.overheats(schedule):
+            return []
+        sla_factor = CONTRACTED_SHARE * SLA_CREDIT_RATE if self.mode == "cloud" else 0.0
+        outage_rate = UNPLANNED_MULTIPLIER * (1 + EMERGENCY_PREMIUM) * (1 + sla_factor)
+        out = []
+        for hs in self._simulate(schedule).hours:
+            offline = set(hs.racks_offline)
+            for zone, temp in sorted(hs.zone_temps_c.items()):
+                if temp <= OVERHEAT_C:
+                    continue
+                gpus = sum(r not in offline for r in ZONE_RACKS[zone]) * GPUS_PER_RACK
+                cost = gpus * utilization(hs.hour) * price(hs.hour // 24) * outage_rate
+                out.append(OverheatHour(hour=hs.hour, zone=zone, temp_c=temp,
+                                        gpus_lost=gpus, cost=round(cost, 2)))
+        return out
 
     def asap_start(self, task: Task, schedule: Schedule) -> int | None:
         """Earliest business-hours start with no same-zone overlap. No thermal check."""
@@ -186,10 +217,13 @@ class _Planner:
             Unscheduled(task_id=t.id, reason=self._why_unscheduled(t, strategy))
             for t in self.tasks if t.id not in schedule
         ]
+        overheats = self.overheat_hours(schedule)
+        overheat_cost = sum(o.cost for o in overheats)
         return Plan(
             mode=self.mode, strategy=strategy,
-            total_cost=round(self.total(schedule), 2),
+            total_cost=round(self.total(schedule) + overheat_cost, 2),
             items=items, unscheduled=unscheduled,
+            overheat_cost=round(overheat_cost, 2), overheats=overheats,
         )
 
     def _why_unscheduled(self, task: Task, strategy: Strategy) -> str:
