@@ -10,6 +10,11 @@ import {
 import { HOURS, DAYS, hourLabel, money, num, pct, esc, shortName } from './ui/format.js';
 import { createPriceChart, createGantt } from './ui/charts.js';
 import { createPlaceholderHall } from './ui/placeholder-hall.js';
+import { buildBeats } from './ui/play-by-play.js';
+
+const BEAT_HOLD_MS = 3000;
+const CONTRAST_HOLD_MS = 2000;   // director: after an ASAP key moment, hold on our plan this long       // explain mode: pause this long on each key moment
+const BEAT_LEAD_HRS = 1.5;       // ...and play the lead-in to it at 1x
 
 const $ = (id) => document.getElementById(id);
 const SEC_PER_HOUR = 0.5;        // 1× playback: half a second per simulated hour
@@ -41,6 +46,13 @@ const S = {
   alarm: null,             // alarm on screen: { inc, wasPlaying }
   slotMarks: null,         // slots Nemotron compared for the new job: { options, chosen }
   slowed: false,
+  explain: true,           // key moments: slow to 1x, hold BEAT_HOLD_MS, show the card
+  hold: 0,                 // performance.now() until which playback holds on a key moment
+  beats: [],               // key moments built from the two plans (ui/play-by-play.js)
+  beatLog: [],
+  dirManual: false,        // user picked Our plan/ASAP while playing: director stops switching until restart
+  dirLabel: '',            // what the director is showing, for the status line
+  contrast: null,          // plan to switch to when the current key-moment hold ends
   summaryDismissed: false,
   view: { pixelArt: false, pixelSize: 3, outlines: true, palette: false },
   loadToken: 0,
@@ -188,6 +200,8 @@ async function loadMode(mode) {
 function applyRaw(raw, at = null) {
   S.raw = raw;
   S.d = prepare(raw);
+  S.beats = buildBeats(S.d.plans.optimized, S.d.plans.asap);
+  S.beatLog = []; S.hold = 0; hideBeat();
   $('offline-chip').hidden = !raw.offline;
   buildLadder();
   priceChart = createPriceChart($('price-chart'), raw.prices);
@@ -604,6 +618,8 @@ function restart() {
   if (!S.agent) hideAlarm();
   pendingAlarm = null;
   lastNewJobState = '';
+  S.beatLog = []; S.hold = 0; hideBeat();
+  S.dirManual = false; S.dirLabel = ''; S.contrast = null;
   S.t = 0;
   S.summaryDismissed = false;
   lastTickerKey = '';
@@ -717,6 +733,13 @@ function applyHall(now) {
     const lvl = hot.get(z) || 0;
     if (zoneAlertCache.get(z) !== lvl) { zoneAlertCache.set(z, lvl); call('setZoneAlert', z, lvl); }
   }
+  // cinematic: glide onto the zone that matters right now (ASAP's overheating zone during the
+  // explained story, even while showing our calm hall; the zone Nemotron is working on; the new
+  // job's zone while it runs), and back out to the whole island when nothing is happening
+  const hotPlan = S.explain ? S.d.plans.asap : plan;
+  const hotNow = (hotPlan.overheats || []).filter(o => o.hour === Math.floor(S.t)).sort((x, y) => y.temp_c - x.temp_c)[0];
+  const jobZone = S.focus && S.t >= S.focus.start - 1 && S.t < S.focus.end ? S.d.tasks.get(S.focus.id)?.zone : null;
+  call('focusZone', hotNow?.zone || S.agent?.zone || jobZone || null);
   call('setHour', S.t);
 }
 
@@ -755,7 +778,9 @@ function updateScoreboard() {
   const status = S.t >= HOURS ? 'Final'
     : pendingAlarm ? 'Alarm: waiting for Nemotron to finish'
     : !S.playing ? 'Paused'
+    : S.hold > performance.now() ? (directorOn() && S.dirLabel) || 'Key moment'
     : S.boosting ? 'Skipping quiet hours'
+    : directorOn() && S.dirLabel ? S.dirLabel
     : S.slowed ? 'Slowed down for the new job'
     : `Playing at ${S.speed}×, day ${Math.min(7, Math.floor(S.t / 24) + 1)} of 7`;
   setText('sb-status', status);
@@ -915,6 +940,34 @@ function setShow(v) {
   S.show = v; setSeg('seg-show', v);
   lastPills = '';
 }
+// manual pick (buttons / key) while playing: the director stops switching until restart or explain is re-enabled
+function pickShow(v) {
+  if (S.playing) { S.dirManual = true; S.contrast = null; S.dirLabel = ''; }
+  setShow(v);
+}
+
+// ---------------------------------------------------------------- director (explain mode)
+// Switches the hall between the two plans so the presenter doesn't have to: each key moment shows
+// its plan; ASAP cooling/overheat moments then cut to our plan at the same hour. Between moments it
+// shows ASAP while ASAP is overheating, else our plan. Never fights a Nemotron run or new-job focus.
+function directorOn() {
+  return S.explain && !S.dirManual && !S.agent && !S.focus;
+}
+function directBeat(group) {
+  if (!directorOn()) { S.contrast = null; return; }
+  const b = group.find(x => x.plan === 'asap') || group[0];
+  setShow(b.plan);
+  S.dirLabel = b.plan === 'asap' ? 'Key moment: showing ASAP' : 'Key moment: showing our plan';
+  S.contrast = b.contrast && b.contrast !== b.plan ? b.contrast : null;
+}
+function directIdle() {
+  if (!directorOn()) return;
+  const hr = Math.floor(S.t);
+  const hot = (S.d.plans.asap?.overheats || []).some(o => o.hour === hr);
+  const want = hot ? 'asap' : 'optimized';
+  if (S.show !== want) setShow(want);
+  S.dirLabel = hot ? 'ASAP overheating: showing ASAP' : '';
+}
 function setMode(v) {
   S.mode = v; setSeg('seg-mode', v);
   loadMode(v);
@@ -931,7 +984,7 @@ function pushView() {
 
 function wireControls() {
   seg('seg-mode', setMode);
-  seg('seg-show', setShow);
+  seg('seg-show', pickShow);
   seg('seg-speed', v => { S.speed = Number(v); });
   seg('seg-render', v => { S.view.pixelArt = v === 'pixel'; pushView(); });
   $('btn-play').addEventListener('click', () => setPlaying(!S.playing));
@@ -942,6 +995,8 @@ function wireControls() {
   $('pixel-size').addEventListener('input', (e) => { S.view.pixelSize = Number(e.target.value); pushView(); });
   $('chk-outlines').addEventListener('change', (e) => { S.view.outlines = e.target.checked; pushView(); });
   $('chk-palette').addEventListener('change', (e) => { S.view.palette = e.target.checked; pushView(); });
+  $('chk-explain').addEventListener('change', (e) => { S.explain = e.target.checked; S.hold = 0; S.contrast = null; if (S.explain) S.dirManual = false; });
+  $('bt-close').addEventListener('click', () => { hideBeat(); S.hold = 0; });
   $('summary-close').addEventListener('click', () => { $('summary').hidden = true; S.summaryDismissed = true; });
   $('summary').addEventListener('click', (e) => { if (e.target === $('summary')) { $('summary').hidden = true; S.summaryDismissed = true; } });
   $('summary-replay').addEventListener('click', restart);
@@ -973,7 +1028,7 @@ function wireControls() {
     else if (k === 'q') call('rotate', -1);
     else if (k === 'e') call('rotate', +1);
     else if (k === 'tab' && (document.activeElement === document.body || !document.activeElement)) {
-      e.preventDefault(); setShow(S.show === 'optimized' ? 'asap' : 'optimized');
+      e.preventDefault(); pickShow(S.show === 'optimized' ? 'asap' : 'optimized');
     }
     else if (k === 'r') restart();
     else if (k === 'p') { S.view.pixelArt = !S.view.pixelArt; setSeg('seg-render', S.view.pixelArt ? 'pixel' : 'raw'); pushView(); }
@@ -985,6 +1040,75 @@ function wireControls() {
   });
 }
 
+// ---------------------------------------------------------------- key moments
+// Cards built from the two plans by ui/play-by-play.js: why ASAP overheats, what ours does instead.
+let beatTimer = 0;
+function showBeats(group) {
+  const tag = (b) => b.plan === 'asap' ? 'asap' : 'ours';
+  $('bt-when').textContent = hourLabel(group[0].hour);
+  $('bt-list').innerHTML = group.map(b => `
+    <div class="bt-item ${tag(b)}"><span class="bt-tag ${tag(b)}">${b.plan === 'asap' ? 'ASAP' : 'Our plan'}</span>
+      <b>${esc(b.title)}</b><p>${esc(b.text)}</p></div>`).join('');
+  S.beatLog.push(...group);
+  renderBeatLog();
+  const card = $('beat');
+  card.classList.remove('open');
+  delete card.dataset.folded;
+  card.hidden = false;
+  stagePick = null;
+  layoutStage();
+  // fold to its chip about 2 s after the 3 s hold ends
+  clearTimeout(beatTimer);
+  beatTimer = setTimeout(() => { card.dataset.folded = '1'; card.classList.remove('open'); layoutStage(); }, 5000);
+}
+function hideBeat() { $('beat').hidden = true; clearTimeout(beatTimer); renderBeatLog(); layoutStage(); }
+/** Left column, under the clock: the last five key moments, newest on top. Click a row to seek there. */
+function renderBeatLog() {
+  const log = $('bt-log');
+  const rows = (S.beatLog || []).slice(-5).reverse();
+  log.innerHTML = rows.map(b => `<li class="${b.plan === 'asap' ? 'asap' : 'ours'}" data-h="${Number(b.hour)}" title="Jump to ${esc(hourLabel(b.hour))}"><time>${esc(hourLabel(b.hour))}</time><span>${esc(b.title)}</span></li>`).join('');
+  log.hidden = !rows.length;
+}
+
+// ---------------------------------------------------------------- stage cards: one at a time
+// Priority alarm > Nemotron step > key moment > new job. The rest fold to a one-line chip; click one to expand it.
+const STAGE = ['alarm', 'agent-callout', 'beat', 'newjob'];
+let stagePick = null;
+function layoutStage() {
+  const vis = STAGE.filter(id => !$(id).hidden && !(id === 'beat' && $('beat').dataset.folded && stagePick !== 'beat'));
+  const top = vis.includes(stagePick) ? stagePick : vis[0];
+  for (const id of STAGE) {
+    const el = $(id), small = !el.hidden && id !== top;
+    el.classList.toggle('compact', small);
+    if (small) el.title = 'Click to expand'; else el.removeAttribute('title');
+  }
+}
+function wireStage() {
+  const seen = new Map(STAGE.map(id => [id, $(id).hidden]));
+  new MutationObserver(() => {
+    for (const id of STAGE) {
+      const h = $(id).hidden;
+      if (seen.get(id) && !h && stagePick !== id) stagePick = null;   // a card just appeared: priority decides again
+      seen.set(id, h);
+    }
+    layoutStage();
+  }).observe(document.querySelector('.stage-top'), { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  for (const id of STAGE) {
+    $(id).addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      const el = $(id);
+      if (el.classList.contains('compact')) { stagePick = id; if (id === 'beat') clearTimeout(beatTimer); layoutStage(); }
+      else if (id === 'beat') el.classList.toggle('open');
+    });
+  }
+  $('bt-log').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-h]');
+    if (li) { S.hold = 0; seek(Number(li.dataset.h)); }
+  });
+  layoutStage();
+}
+wireStage();
+
 // ---------------------------------------------------------------- loop
 let last = performance.now();
 function frame(now) {
@@ -992,7 +1116,14 @@ function frame(now) {
   last = now;
   if (S.d) {
     if (S.playing && S.t >= HOURS) setPlaying(false);
+    else if (S.playing && S.hold > now) S.boosting = false;   // a key moment is on screen: hold
+    else if (S.playing && S.contrast && directorOn()) {        // director: same hour, our plan
+      setShow(S.contrast); S.contrast = null;
+      S.dirLabel = 'Same hour, our plan';
+      S.hold = now + CONTRAST_HOLD_MS; S.boosting = false;
+    }
     else if (S.playing) {
+      S.hold = 0; S.contrast = null;
       // never fast-forward through the lead-in to the job the agent just added; play it slower
       const f = S.focus;
       const nearFocus = f && S.t >= f.start - LEAD_HOURS - 1 && S.t < f.end;
@@ -1000,12 +1131,24 @@ function frame(now) {
       S.slowed = !!(f && S.t >= f.start && S.t < f.end);
       let rate = Math.min(MAX_HOURS_PER_SEC, (S.speed / SEC_PER_HOUR) * (S.boosting ? QUIET_BOOST : 1));
       if (S.slowed) rate = Math.min(rate, Math.max(rate * FOCUS_RATE, (f.end - f.start) / FOCUS_MAX_SECS));
+      // explain mode: play the lead-in to the next key moment at 1x so judges see it coming
+      const nb = S.explain ? S.beats.find(b => b.hour > S.t) : null;
+      if (nb && nb.hour - S.t <= BEAT_LEAD_HRS) { S.boosting = false; rate = Math.min(rate, 1 / SEC_PER_HOUR); }
       const before = S.t;
       S.t = Math.min(HOURS, S.t + dt * rate);
       // playback of our plan reached a simulated alarm: stop on its hour and let Nemotron respond
       const inc = crossedIncident(before, S.t);
+      const hit = inc ? [] : S.beats.filter(b => before < b.hour && b.hour <= S.t);
       if (inc) onIncidentReached(inc);
+      else if (hit.length) {
+        const h = hit[0].hour;
+        if (S.explain) { S.t = h; S.hold = now + BEAT_HOLD_MS; }
+        const group = hit.filter(b => b.hour === h);
+        directBeat(group);
+        showBeats(group);
+      }
       else if (S.t >= HOURS) setPlaying(false);
+      else directIdle();
     }
     if (pendingAlarm) firePendingAlarm();
     try { render(now); } catch (e) {

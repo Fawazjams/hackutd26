@@ -81,6 +81,10 @@ class Plan(BaseModel):
     # Optional (added): overheats the hall sim finds in this plan. Always empty for "optimized".
     overheat_cost: float = 0.0
     overheats: list[OverheatHour] = []
+    # Optional (added): hall sim zone temps per hour (index = week hour) and the overheat line,
+    # so the UI can explain key moments with the sim's own numbers.
+    zone_temps: list[dict[str, float]] = []
+    temp_limit_c: float | None = None
 
 
 class PlanRequest(BaseModel):

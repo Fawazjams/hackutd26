@@ -147,6 +147,8 @@ export async function createDataCenter(containerEl) {
   // ---- camera: orthographic isometric, orbiting the island
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const target = new THREE.Vector3(0, -7, 0);
+  const home = target.clone();                              // whole-island framing
+  const shot = { zone: null, pos: home.clone() };           // cinematic focus (focusZone), eased in frame()
   const cam = { az: Math.PI / 4, azTarget: Math.PI / 4, el: 0.62, zoom: 1, zoomTarget: 1, dist: 160, drift: 0 };
   const VIEW_H = 90; // world units visible vertically at zoom 1 (whole island + underside)
 
@@ -338,7 +340,8 @@ export async function createDataCenter(containerEl) {
     if (!state.paused) animT += dt;
     cam.drift += dt * 0.25;
     cam.az += (cam.azTarget - cam.az) * Math.min(1, dt * 6);
-    cam.zoom += (cam.zoomTarget - cam.zoom) * Math.min(1, dt * 8);
+    cam.zoom += (cam.zoomTarget - cam.zoom) * Math.min(1, dt * (shot.zone ? 1.4 : 8));
+    target.lerp(shot.pos, Math.min(1, dt * 1.4));            // slow glide, no cuts
     updateCamera();
     for (const f of anim) f(animT, state.paused ? 0 : dt, state);
     hall.tick(animT, now / 1000, state);
@@ -442,6 +445,15 @@ export async function createDataCenter(containerEl) {
       }
     },
     rotate(dir) { cam.azTarget += (dir < 0 ? -1 : 1) * Math.PI / 2; },
+    /** Ease the camera onto a zone's row (null = back to the whole island). Repeated calls are no-ops. */
+    focusZone(zoneId) {
+      const i = ZONES.indexOf(zoneId);
+      const key = i < 0 ? null : zoneId;
+      if (key === shot.zone) return;
+      shot.zone = key;
+      if (key) { shot.pos.set(-2, 1, ROW_Z[i]); cam.zoomTarget = 2.0; }
+      else { shot.pos.copy(home); cam.zoomTarget = 1; }
+    },
     setPaused(p) { state.paused = !!p; },
     onRackClick(cb) { state.clickCb = typeof cb === 'function' ? cb : null; },
     getRackIds() { return hall.racks.map(r => r.id); },

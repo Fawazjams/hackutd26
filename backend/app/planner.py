@@ -224,6 +224,8 @@ class _Planner:
             total_cost=round(self.total(schedule) + overheat_cost, 2),
             items=items, unscheduled=unscheduled,
             overheat_cost=round(overheat_cost, 2), overheats=overheats,
+            zone_temps=[hs.zone_temps_c for hs in self._simulate(schedule).hours],
+            temp_limit_c=OVERHEAT_C,
         )
 
     def _why_unscheduled(self, task: Task, strategy: Strategy) -> str:
