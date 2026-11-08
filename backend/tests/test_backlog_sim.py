@@ -3,9 +3,9 @@ from collections import Counter
 from fastapi.testclient import TestClient
 
 from app.backlog import BACKLOG, task_lookup
-from app.config import COOLING_ZONES, HOURS, NUM_RACKS, OVERHEAT_C, ZONE_RACKS
+from app.config import COOLING_ZONES, HOURS, OVERHEAT_C, ZONE_RACKS
 from app.main import app
-from app.schemas import CostBreakdown, Plan, ScheduledTask, Task
+from app.schemas import Plan, PlanItem, Task, hour_label
 from app.simulate import find_conflicts, simulate_plan
 
 client = TestClient(app)
@@ -14,13 +14,19 @@ TASKS = task_lookup()
 
 def make_plan(*items: tuple[str, int], extra: list[Task] | None = None) -> Plan:
     lookup = task_lookup(extra)
-    sched = []
+    out = []
     for tid, start in items:
-        dur = lookup[tid].duration_hrs if tid in lookup else 1
-        cost = CostBreakdown(task_id=tid, start_hour=start, mode="gpu_cloud",
-                             downtime_cost=0, risk_cost=0, sla_cost=0, total=0)
-        sched.append(ScheduledTask(task_id=tid, start_hour=start, end_hour=start + dur, cost=cost))
-    return Plan(mode="gpu_cloud", strategy="optimized", schedule=sched, total_cost=0, tasks=extra or [])
+        t = lookup.get(tid)
+        end = start + (t.duration_hrs if t else 1)
+        out.append(PlanItem(task_id=tid, name=t.name if t else tid, zone=t.zone if t else "?",
+                            start_hour=start, end_hour=end, start_label=hour_label(min(start, 168)),
+                            end_label=hour_label(min(end, 168)), gpus_offline=0,
+                            downtime_cost=0, sla_cost=0, risk_cost=0, total=0))
+    return Plan(mode="cloud", strategy="optimized", total_cost=0, items=out)
+
+
+def sim(plan: Plan, extra: list[Task] | None = None):
+    return simulate_plan(plan, task_lookup(extra))
 
 
 def kinds(result) -> Counter:
@@ -39,7 +45,7 @@ def test_backlog_shape():
 def test_backlog_racks_and_windows_valid():
     for t in BACKLOG:
         assert t.zone in COOLING_ZONES
-        assert t.racks_affected and all(0 <= r < NUM_RACKS for r in t.racks_affected)
+        assert t.racks_affected
         assert set(t.racks_affected) <= set(ZONE_RACKS[t.zone]), f"{t.id} racks outside zone {t.zone}"
         for w in t.allowed_windows:
             assert 0 <= w.start_hour < w.end_hour <= HOURS
@@ -114,8 +120,8 @@ def test_unknown_task_and_extra_tasks():
     r = simulate_plan(make_plan(("X9", 5)))
     assert kinds(r)["unknown_task"] == 1
     ups_b = Task(id="T7", name="UPS-B battery swap", equipment="UPS-B", duration_hrs=3,
-                 racks_affected=[30, 31], zone="Z4", risk_growth_per_day=0.01)
-    r2 = simulate_plan(make_plan(("T7", 40), ("T5", 41), extra=[ups_b]))
+                 racks_affected=["D01", "D02"], zone="Z4", risk_growth_per_day=0.01)
+    r2 = sim(make_plan(("T7", 40), ("T5", 41), extra=[ups_b]), [ups_b])
     assert kinds(r2)["unknown_task"] == 0
     assert [v.hour for v in r2.violations if v.kind == "zone_conflict"] == [41, 42]
 
@@ -133,3 +139,13 @@ def test_deterministic_function_and_api():
     b = client.post("/simulate", json=p.model_dump()).json()
     assert a == b
     assert a == simulate_plan(p).model_dump()
+
+
+def test_real_plans_asap_overheats_optimized_clean():
+    # The demo beat: ASAP puts CRAC-2 (Z2) and CDU-3 (Z3) together Mon 09:00 -> overheat.
+    from app.planner import make_plan as plan_week
+    from app.stubs import seeded_backlog
+    asap = simulate_plan(plan_week(seeded_backlog(), "cloud", "asap"))
+    opt = simulate_plan(plan_week(seeded_backlog(), "cloud", "optimized"))
+    assert kinds(asap)["overheat"] > 0
+    assert opt.violations == []

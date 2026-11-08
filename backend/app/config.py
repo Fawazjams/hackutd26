@@ -25,8 +25,10 @@ SLA_PENALTY = 0.10
 UNPLANNED_COST_MULTIPLIER = 3.0
 
 # Hall layout + thermal sim (ASSUMED; owner: Loki)
-RACKS_PER_ZONE = NUM_RACKS // len(COOLING_ZONES)          # ASSUMED: Z1 = racks 0-9, Z2 = 10-19, ...
-ZONE_RACKS = {z: list(range(i * RACKS_PER_ZONE, (i + 1) * RACKS_PER_ZONE)) for i, z in enumerate(COOLING_ZONES)}
+RACKS_PER_ZONE = NUM_RACKS // len(COOLING_ZONES)          # ASSUMED: one row per zone
+ROWS = "ABCD"                                             # row A = Z1, B = Z2, C = Z3, D = Z4 (matches frontend hall)
+ZONE_RACKS = {z: [f"{ROWS[i]}{n:02d}" for n in range(1, RACKS_PER_ZONE + 1)]   # "A01".."A10", ...
+              for i, z in enumerate(COOLING_ZONES)}
 ZONE_NEIGHBORS = {                                        # ASSUMED: zones laid out in a line, neighbors share backup cooling
     z: [COOLING_ZONES[j] for j in (i - 1, i + 1) if 0 <= j < len(COOLING_ZONES)]
     for i, z in enumerate(COOLING_ZONES)

@@ -22,7 +22,7 @@ def msg(*calls, content=""):
 
 
 UPS_TASK_ARGS = {"name": "UPS-B battery swap", "equipment": "UPS-B", "duration_hrs": 3,
-                 "racks_affected": list(range(30, 40)), "zone": "Z4",
+                 "racks_affected": [f"D{i:02d}" for i in range(1, 11)], "zone": "Z4",
                  "allowed_windows": [{"start_hour": 48, "end_hour": 72}, {"start_hour": 96, "end_hour": 120}]}
 
 
@@ -53,10 +53,11 @@ def test_day_windows_and_lookup():
     assert "error" in day_windows(["Funday"])
     assert "error" in day_windows(["Mon"], 18, 8)
     ups = lookup_equipment("UPS-B battery")
-    assert ups["equipment"] == "UPS-B" and ups["zone"] == "Z4" and ups["racks"] == list(range(30, 40))
-    assert lookup_equipment("crac 2")["racks"] == list(range(10, 15))   # matches backlog T1
-    assert lookup_equipment("CDU-3")["racks"] == list(range(24, 28))    # matches backlog T6
-    assert lookup_equipment("PDU row B")["racks"] == list(range(15, 20))  # matches backlog T2
+    assert ups["equipment"] == "UPS-B" and ups["zone"] == "Z4" and ups["racks"] == [f"D{i:02d}" for i in range(1, 11)]
+    assert lookup_equipment("crac 2")["racks"] == ["B01", "B02", "B03", "B04", "B05"]   # matches backlog T1
+    assert lookup_equipment("CDU-3")["racks"] == ["C05", "C06", "C07", "C08"]          # matches backlog T6
+    assert lookup_equipment("PDU row B")["racks"] == ["B06", "B07", "B08", "B09", "B10"]  # matches backlog T2
+    assert lookup_equipment("PDU-B")["racks"] == lookup_equipment("PDU row B")["racks"]  # frontend alias
     assert "error" in lookup_equipment("flux capacitor")
 
 
@@ -68,8 +69,7 @@ def test_tool_call_sequence_recorded():
     assert r.tool_calls[:5] == ["lookup_equipment", "day_windows", "add_task", "make_plan", "simulate"]
     assert "guardrail:make_plan[asap]" in r.tool_calls
     assert r.task.id == "R1" and r.task.zone == "Z4"
-    assert "R1" in [s.task_id for s in r.plan.schedule]
-    assert r.plan.tasks[-1].id == "R1"
+    assert "R1" in [s.task_id for s in r.plan.items]
     assert r.explanation == "Scheduled the UPS-B swap."
 
 
@@ -85,7 +85,7 @@ def test_add_task_validation_error_goes_back_to_llm():
 
 
 def test_racks_outside_zone_rejected():
-    llm = ScriptedLLM([msg(call("add_task", dict(UPS_TASK_ARGS, racks_affected=[0, 1])))])
+    llm = ScriptedLLM([msg(call("add_task", dict(UPS_TASK_ARGS, racks_affected=["A01", "A02"])))])
     run_request("unscripted thing", llm)
     content = json.loads([m for m in llm.received[1] if m["role"] == "tool"][0]["content"])
     assert "inside Z4" in content["error"]
@@ -100,9 +100,9 @@ def test_explanation_with_invented_number_falls_back_to_facts():
 def test_explanation_numbers_match_tool_numbers():
     r = run_request(UPS_TEXT, None)
     from app import planner
-    from app.schemas import PlanRequest
-    opt = planner.make_plan(PlanRequest(strategy="optimized", extra_tasks=[r.task]))
-    asap = planner.make_plan(PlanRequest(strategy="asap", extra_tasks=[r.task]))
+    from app.backlog import BACKLOG
+    opt = planner.make_plan(BACKLOG + [r.task], "cloud", "optimized")
+    asap = planner.make_plan(BACKLOG + [r.task], "cloud", "asap")
     assert f"${opt.total_cost:,.2f}" in r.explanation
     assert f"${asap.total_cost:,.2f}" in r.explanation
     assert f"${asap.total_cost - opt.total_cost:,.2f}" in r.explanation
@@ -130,7 +130,7 @@ def test_demo_requests_offline(text):
     r = run_request(text, None)
     expected = DEMO_REQUESTS[text]
     assert r.task == expected
-    assert expected.id in [s.task_id for s in r.plan.schedule]
+    assert expected.id in [s.task_id for s in r.plan.items]
     assert r.tool_calls[0] == "fallback:add_task"
     assert expected.name in r.explanation
 

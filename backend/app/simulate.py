@@ -26,7 +26,7 @@ def is_cooling_task(task: Task) -> bool:
 def active_tasks_by_hour(plan: Plan, tasks: dict[str, Task]) -> list[list[Task]]:
     """For each hour 0..HOURS-1, the known tasks running that hour ([start_hour, end_hour))."""
     active: list[list[Task]] = [[] for _ in range(HOURS)]
-    for s in plan.schedule:
+    for s in plan.items:
         t = tasks.get(s.task_id)
         if t is None:
             continue
@@ -43,11 +43,11 @@ def _in_window(task: Task, start: int, end: int) -> bool:
 
 def _schedule_violations(plan: Plan, tasks: dict[str, Task]) -> list[Violation]:
     out = []
-    for s in plan.schedule:
+    for s in plan.items:
         t = tasks.get(s.task_id)
         if t is None:
             out.append(Violation(hour=s.start_hour, kind="unknown_task",
-                                 detail=f"{s.task_id} is not in the backlog or plan.tasks"))
+                                 detail=f"{s.task_id} is not in the backlog or the given tasks"))
         elif s.end_hour <= s.start_hour or not _in_window(t, s.start_hour, s.end_hour):
             out.append(Violation(hour=s.start_hour, kind="window",
                                  detail=f"{t.id} ({t.name}) at hours {s.start_hour}-{s.end_hour} "
@@ -74,12 +74,13 @@ def _sort(vs: list[Violation]) -> list[Violation]:
 
 
 def find_conflicts(plan: Plan, tasks: dict[str, Task] | None = None) -> list[Violation]:
-    """Cheap check (no thermal model): window, unknown_task and zone_conflict violations."""
-    tasks = tasks if tasks is not None else task_lookup(plan.tasks)
+    """Cheap check (no thermal model): window, unknown_task and zone_conflict violations.
+    `tasks` = id -> Task (default: the seeded backlog; pass backlog.task_lookup(extra) for new tasks)."""
+    tasks = tasks if tasks is not None else task_lookup()
     return _sort(_schedule_violations(plan, tasks) + _zone_conflicts(active_tasks_by_hour(plan, tasks)))
 
 
-def _target_temp(hour: int, zone: str, offline: set[int], cooling_down: set[str]) -> float:
+def _target_temp(hour: int, zone: str, offline: set[str], cooling_down: set[str]) -> float:
     racks = ZONE_RACKS[zone]
     online_share = sum(r not in offline for r in racks) / len(racks)
     temp = BASE_ZONE_TEMP_C + _NOISE[hour][zone] - OFFLINE_COOLING_C * (1 - online_share)
@@ -93,7 +94,7 @@ def _target_temp(hour: int, zone: str, offline: set[int], cooling_down: set[str]
 
 def simulate_plan(plan: Plan, tasks: dict[str, Task] | None = None) -> SimResult:
     """Full hourly sim: racks offline, zone temps (with thermal inertia) and all violations."""
-    tasks = tasks if tasks is not None else task_lookup(plan.tasks)
+    tasks = tasks if tasks is not None else task_lookup()
     active = active_tasks_by_hour(plan, tasks)
     violations = _schedule_violations(plan, tasks) + _zone_conflicts(active)
 

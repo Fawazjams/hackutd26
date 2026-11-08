@@ -1,15 +1,22 @@
 """GET /backlog. Owner: Loki. Seeded 7-day maintenance backlog (all values ASSUMED, see HACK.md).
 
-Hours count from Mon 00:00 (0..167). Designed conflicts:
+Hours count from Mon 00:00 (0..167). Racks are "A01".."D10"; row A = zone Z1 ... row D = Z4.
+Tasks with no allowed_windows argument may run any time (models.Task default = whole week).
+Designed conflicts:
 - T1 + T2 share zone Z2 (zone_conflict if they overlap); T4 + T5 share Z4.
 - T1 (CRAC-2) and T6 (CDU-3) are cooling outages in neighboring zones: overlapping them
   removes backup cooling and overheats Z2/Z3.
 """
 from fastapi import APIRouter
+
 from .config import HORIZON_DAYS
 from .schemas import Task, Window
 
 router = APIRouter(tags=["backlog"])
+
+
+def _racks(row: str, first: int, last: int) -> list[str]:
+    return [f"{row}{i:02d}" for i in range(first, last + 1)]
 
 
 def _daily(days: list[int], start: int, end: int) -> list[Window]:
@@ -21,22 +28,19 @@ WEEKDAYS = list(range(5))
 
 BACKLOG: list[Task] = [
     Task(id="T1", name="CRAC-2 compressor replacement", equipment="CRAC-2", duration_hrs=6,
-         racks_affected=list(range(10, 15)), zone="Z2", risk_growth_per_day=0.015,
+         racks_affected=_racks("B", 1, 5), zone="Z2", risk_growth_per_day=0.015,
          allowed_windows=[Window(start_hour=8, end_hour=HORIZON_DAYS * 24)]),   # parts arrive Mon 08:00
     Task(id="T2", name="PDU breaker swaps, row B", equipment="PDU row B", duration_hrs=4,
-         racks_affected=list(range(15, 20)), zone="Z2", risk_growth_per_day=0.010,
-         allowed_windows=[]),
+         racks_affected=_racks("B", 6, 10), zone="Z2", risk_growth_per_day=0.010),
     Task(id="T3", name="GPU firmware rollout", equipment="GPU firmware", duration_hrs=3,
-         racks_affected=list(range(0, 8)), zone="Z1", risk_growth_per_day=0.005,
-         allowed_windows=[]),
+         racks_affected=_racks("A", 1, 8), zone="Z1", risk_growth_per_day=0.005),
     Task(id="T4", name="UPS battery test", equipment="UPS-A", duration_hrs=2,
-         racks_affected=list(range(30, 40)), zone="Z4", risk_growth_per_day=0.020,
+         racks_affected=_racks("D", 1, 10), zone="Z4", risk_growth_per_day=0.020,
          allowed_windows=_daily([1, 3], 8, 17)),                                 # vendor: Tue/Thu 08-17
     Task(id="T5", name="Fiber re-cabling", equipment="Fiber spine 4", duration_hrs=5,
-         racks_affected=list(range(32, 37)), zone="Z4", risk_growth_per_day=0.008,
-         allowed_windows=[]),
+         racks_affected=_racks("D", 3, 7), zone="Z4", risk_growth_per_day=0.008),
     Task(id="T6", name="CDU coolant flush", equipment="CDU-3", duration_hrs=4,
-         racks_affected=list(range(24, 28)), zone="Z3", risk_growth_per_day=0.012,
+         racks_affected=_racks("C", 5, 8), zone="Z3", risk_growth_per_day=0.012,
          allowed_windows=_daily(WEEKDAYS, 8, 20)),                               # weekdays 08-20
 ]
 

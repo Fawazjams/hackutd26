@@ -1,25 +1,12 @@
-"""Shared contracts. PROPOSAL: agree on these as a team, then change carefully (add optional fields, don't rename)."""
-from typing import Literal
-from pydantic import BaseModel, Field
+"""Shared contracts. Task / Plan / PlanRequest come from models.py (Nandhan's contract, which the
+frontend and its cached fallback plans are built on); this module re-exports them and adds the
+shapes for /cost, /simulate and /request. Change carefully: add optional fields, don't rename.
+"""
+from pydantic import BaseModel
 
-Mode = Literal["gpu_cloud", "private"]
-Strategy = Literal["optimized", "asap"]
-
-
-class Window(BaseModel):
-    start_hour: int = Field(ge=0, description="hours from start of week (Mon 00:00 = 0)")
-    end_hour: int = Field(gt=0, description="exclusive; task must finish by this hour")
-
-
-class Task(BaseModel):
-    id: str
-    name: str
-    equipment: str                      # e.g. "CRAC-2", "PDU row B"
-    duration_hrs: int = Field(gt=0)
-    racks_affected: list[int]           # rack indices 0..NUM_RACKS-1
-    zone: str                           # cooling zone, e.g. "Z2"
-    risk_growth_per_day: float          # added failure probability per day waited, e.g. 0.01
-    allowed_windows: list[Window] = []  # empty = any time
+from .models import (  # noqa: F401  (re-exported)
+    HOURS_IN_WEEK, Mode, Plan, PlanItem, PlanRequest, Strategy, Task, Unscheduled, Window, hour_label,
+)
 
 
 class DayPrice(BaseModel):
@@ -40,36 +27,15 @@ class CostBreakdown(BaseModel):
     total: float
 
 
-class ScheduledTask(BaseModel):
-    task_id: str
-    start_hour: int
-    end_hour: int
-    cost: CostBreakdown
-
-
-class Plan(BaseModel):
-    mode: Mode
-    strategy: Strategy
-    schedule: list[ScheduledTask]
-    total_cost: float
-    tasks: list[Task] = []   # optional: full Task objects for non-backlog ids (phase 2); /simulate falls back to BACKLOG
-
-
-class PlanRequest(BaseModel):
-    mode: Mode = "gpu_cloud"
-    strategy: Strategy = "optimized"
-    extra_tasks: list[Task] = []        # phase 2: tasks Nemotron adds
-
-
 class HourState(BaseModel):
     hour: int
-    racks_offline: list[int]
+    racks_offline: list[str]          # rack ids, e.g. "B03"
     zone_temps_c: dict[str, float]
 
 
 class Violation(BaseModel):
     hour: int
-    kind: str      # e.g. "zone_conflict", "overheat", "window"
+    kind: str      # "zone_conflict", "overheat", "window", "unknown_task"
     detail: str
 
 

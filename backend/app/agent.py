@@ -31,9 +31,9 @@ DEFAULT_RISK_GROWTH = 0.01  # ASSUMED: per-day failure-chance growth when the re
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 # ---------------------------------------------------------------- equipment catalog (ASSUMED)
-# Zone i (Z1..Z4) owns racks ZONE_RACKS[zone]. Cooling units derate the first half of their zone
-# (matches backlog T1 CRAC-2 -> 10-14, T6 CDU-3 -> 24-27); PDU rows power the second half
-# (matches T2 PDU row B -> 15-19). Align these names with the frontend's equipment IDs.
+# Zone i (Z1..Z4) = row A..D, racks "A01".."A10" etc. Cooling units derate the first half of their
+# zone (matches backlog T1 CRAC-2 -> B01-B05, T6 CDU-3 -> C05-C08); PDU rows power the second half
+# (matches T2 PDU row B -> B06-B10).
 
 
 def _catalog() -> dict[str, dict[str, Any]]:
@@ -45,7 +45,9 @@ def _catalog() -> dict[str, dict[str, Any]]:
         cat[f"CRAC-{n}"] = {"zone": z, "racks": racks[:half], "cooling": True}
         cat[f"CDU-{n}"] = {"zone": z, "racks": racks[4:8], "cooling": True}
         cat[f"PDU row {row}"] = {"zone": z, "racks": racks[half:], "cooling": False}
+        cat[f"PDU-{row}"] = cat[f"PDU row {row}"]                      # alias (frontend/stub naming)
         cat[f"Fiber spine {n}"] = {"zone": z, "racks": racks[2:7], "cooling": False}
+        cat[f"Fiber trunk {row}"] = cat[f"Fiber spine {n}"]            # alias
     last = COOLING_ZONES[-1]
     cat["UPS-A"] = {"zone": last, "racks": ZONE_RACKS[last], "cooling": False}
     cat["UPS-B"] = {"zone": last, "racks": ZONE_RACKS[last], "cooling": False}
@@ -106,7 +108,8 @@ def _validate_task(args: dict[str, Any], state: AgentState) -> Task | str:
     args = dict(args)
     args.setdefault("id", f"R{len(state.tasks) + 1}")
     args.setdefault("risk_growth_per_day", DEFAULT_RISK_GROWTH)
-    args.setdefault("allowed_windows", [])
+    if not args.get("allowed_windows"):
+        args.pop("allowed_windows", None)  # none given = any time (models.Task default: whole week)
     try:
         t = Task(**args)
     except ValidationError as e:
@@ -122,26 +125,30 @@ def _validate_task(args: dict[str, Any], state: AgentState) -> Task | str:
     return t
 
 
-def _plan(state: AgentState, strategy: str, mode: str = "gpu_cloud") -> Plan:
-    from . import planner  # lazy: picks up Nandhan's real optimizer
-    plan = planner.make_plan(PlanRequest(mode=mode, strategy=strategy, extra_tasks=state.tasks))
-    plan = plan.model_copy(update={"tasks": list(state.tasks)})
+def _plan(state: AgentState, strategy: str, mode: str = "cloud") -> Plan:
+    from . import planner  # lazy: Nandhan's optimizer
+    from .backlog import BACKLOG
+    known = {t.id for t in state.tasks}
+    tasks = [t for t in BACKLOG if t.id not in known] + list(state.tasks)
+    plan = planner.make_plan(PlanRequest(mode=mode, strategy=strategy, tasks=tasks))
     state.plans[strategy] = plan
     return plan
 
 
 def _simulate(state: AgentState) -> list[Violation]:
     from . import simulate
+    from .backlog import task_lookup
     plan = state.plans.get("optimized") or _plan(state, "optimized")
-    state.violations = simulate.simulate_plan(plan).violations
+    state.violations = simulate.simulate_plan(plan, task_lookup(state.tasks)).violations
     return state.violations
 
 
 def _plan_summary(plan: Plan) -> dict[str, Any]:
     return {"strategy": plan.strategy, "mode": plan.mode, "total_cost": round(plan.total_cost, 2),
-            "schedule": [{"task_id": s.task_id, "start": fmt_hour(s.start_hour), "end": fmt_hour(s.end_hour),
-                          "start_hour": s.start_hour, "end_hour": s.end_hour, "cost": round(s.cost.total, 2)}
-                         for s in plan.schedule]}
+            "schedule": [{"task_id": s.task_id, "start": s.start_label, "end": s.end_label,
+                          "start_hour": s.start_hour, "end_hour": s.end_hour, "cost": s.total}
+                         for s in plan.items],
+            "unscheduled": [u.model_dump() for u in plan.unscheduled]}
 
 
 def run_tool(state: AgentState, name: str, args: dict[str, Any]) -> Any:
@@ -151,8 +158,8 @@ def run_tool(state: AgentState, name: str, args: dict[str, Any]) -> Any:
             from .backlog import BACKLOG
             return [t.model_dump() for t in BACKLOG]
         if name == "get_prices":
-            from . import prices
-            return [p.model_dump() for p in prices.get_prices(days=int(args.get("days", 7)))]
+            from . import stubs  # same seeded curve GET /prices serves
+            return stubs.prices(int(args.get("days", 7)))
         if name == "lookup_equipment":
             return lookup_equipment(str(args.get("name", "")))
         if name == "day_windows":
@@ -165,7 +172,7 @@ def run_tool(state: AgentState, name: str, args: dict[str, Any]) -> Any:
             state.tasks = [x for x in state.tasks if x.id != t.id] + [t]
             return {"ok": True, "task": t.model_dump()}
         if name == "make_plan":
-            return _plan_summary(_plan(state, args.get("strategy", "optimized"), args.get("mode", "gpu_cloud")))
+            return _plan_summary(_plan(state, args.get("strategy", "optimized"), args.get("mode", "cloud")))
         if name == "simulate":
             vs = _simulate(state)
             return {"violations": len(vs), "first": [v.model_dump() for v in vs[:5]]}
@@ -193,7 +200,7 @@ TOOLS = [
     _fn("add_task", "Add the requested maintenance task to this week's plan.", {
         "name": {"type": "string"}, "equipment": {"type": "string"},
         "duration_hrs": {"type": "integer"},
-        "racks_affected": {"type": "array", "items": {"type": "integer"}},
+        "racks_affected": {"type": "array", "items": {"type": "string"}, "description": "rack ids, e.g. ['D01','D02']"},
         "zone": {"type": "string"},
         "risk_growth_per_day": {"type": "number", "description": "optional, default 0.01"},
         "allowed_windows": {"type": "array", "items": {"type": "object", "properties": {
@@ -201,7 +208,7 @@ TOOLS = [
         ["name", "equipment", "duration_hrs", "racks_affected", "zone"]),
     _fn("make_plan", "Schedule the backlog plus added tasks. strategy 'optimized' or 'asap'.", {
         "strategy": {"type": "string", "enum": ["optimized", "asap"]},
-        "mode": {"type": "string", "enum": ["gpu_cloud", "private"]}}),
+        "mode": {"type": "string", "enum": ["cloud", "private"]}}),
     _fn("simulate", "Run the hall simulation on the latest optimized plan; returns violations "
         "(zone conflicts, overheating, window breaks).", {}),
 ]
@@ -313,14 +320,15 @@ def build_facts(state: AgentState) -> dict[str, Any]:
     """Every number shown to the user comes from here (tools' outputs), never from the LLM."""
     t = state.tasks[-1]
     opt, asap = state.plans["optimized"], state.plans["asap"]
-    s = next((x for x in opt.schedule if x.task_id == t.id), None)
+    s = next((x for x in opt.items if x.task_id == t.id), None)
+    why = next((u.reason for u in opt.unscheduled if u.task_id == t.id), "")
     savings = asap.total_cost - opt.total_cost
     vs = state.violations or []
     return {
         "task_id": t.id, "task": t.name, "equipment": t.equipment, "zone": t.zone,
         "racks": f"{min(t.racks_affected)}-{max(t.racks_affected)}", "duration_hrs": t.duration_hrs,
         "windows": [f"{fmt_hour(w.start_hour)} to {fmt_hour(w.end_hour)}" for w in t.allowed_windows] or ["any time"],
-        "scheduled": f"{fmt_hour(s.start_hour)} to {fmt_hour(s.end_hour)}" if s else "not scheduled",
+        "scheduled": f"{fmt_hour(s.start_hour)} to {fmt_hour(s.end_hour)}" if s else f"not scheduled ({why})",
         "optimized_total": round(opt.total_cost, 2), "asap_total": round(asap.total_cost, 2),
         "savings": round(savings, 2),
         "savings_pct": round(100 * savings / asap.total_cost, 1) if asap.total_cost > 0 else 0.0,

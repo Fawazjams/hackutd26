@@ -17,7 +17,7 @@ def get_prices(days: int = HORIZON_DAYS) -> list[DayPrice]:
 
 
 @router.get("/cost", response_model=CostBreakdown)
-def get_cost(task_id: str, start_hour: int, mode: Mode = "gpu_cloud") -> CostBreakdown:
+def get_cost(task_id: str, start_hour: int, mode: Mode = "cloud") -> CostBreakdown:
     # TODO(Fawaz): GPUs_offline × utilization(hour) × price(day) [+ SLA] + risk
     return CostBreakdown(task_id=task_id, start_hour=start_hour, mode=mode,
                          downtime_cost=0, risk_cost=0, sla_cost=0, total=0)

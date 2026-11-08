@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Downtime, Priced</title>
+  <meta name="description" content="Schedule GPU data-center maintenance at the lowest cost, priced in H100 compute-market dollars." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Dev aid: surface any JS error on the page instead of failing silently. -->
+  <script>
+    (function () {
+      function show(msg) {
+        var box = document.getElementById('dev-errors');
+        if (!box) { window.__pendingErrors = (window.__pendingErrors || []).concat(msg); return; }
+        var row = document.createElement('div');
+        row.textContent = msg;
+        box.appendChild(row);
+        box.hidden = false;
+      }
+      window.__showDevError = show;
+      window.addEventListener('error', function (e) {
+        if (e && e.message) show('JS error: ' + e.message + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e && e.reason; show('Unhandled: ' + (r && (r.stack || r.message) || r));
+      });
+    })();
+  </script>
+
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <!-- 3D hall (scene.js) or the 2D placeholder renders in here -->
+  <div id="stage" aria-label="GPU hall diorama">
+    <div class="stage-loading" id="stage-loading"><span class="spinner" aria-hidden="true"></span>Building the hall…</div>
+  </div>
+
+  <!-- Top-left: title block -->
+  <header class="brand">
+    <div class="kicker">Pixel diorama <span class="dot-sep">·</span> GPU hall</div>
+    <h1 class="title">Downtime,<br />priced.</h1>
+    <p class="lede">A 1,280-GPU hall with a week of maintenance to fit in. Every lost GPU-hour is priced at the H100 compute market rate, and the planner picks the cheapest safe hour for each job. Watch it race the do-it-ASAP plan.</p>
+    <div class="chip chip-offline" id="offline-chip" hidden title="The API did not answer, so this page is showing a saved copy of real backend responses.">
+      <span class="chip-dot"></span>Offline — cached plan
+    </div>
+  </header>
+
+  <!-- Top-center: LED scoreboard -->
+  <section class="scoreboard" id="scoreboard" aria-label="Dollars lost so far">
+    <div class="sb-head">
+      <span>$ lost so far</span>
+      <span class="sb-mode" id="sb-mode">GPU cloud</span>
+    </div>
+    <div class="sb-row" data-plan="optimized">
+      <span class="sb-dot"></span>
+      <span class="sb-name">Our plan</span>
+      <span class="sb-bar"><i id="sb-bar-ours"></i></span>
+      <span class="sb-money led" id="sb-ours">$0</span>
+      <span class="sb-gpus" title="GPUs offline right now under this plan"><b id="sb-gpus-ours">0</b><small>GPU off</small></span>
+    </div>
+    <div class="sb-row" data-plan="asap">
+      <span class="sb-dot"></span>
+      <span class="sb-name">ASAP</span>
+      <span class="sb-bar"><i id="sb-bar-asap"></i></span>
+      <span class="sb-money led" id="sb-asap">$0</span>
+      <span class="sb-gpus" title="GPUs offline right now under this plan"><b id="sb-gpus-asap">0</b><small>GPU off</small></span>
+    </div>
+    <div class="sb-foot">
+      <span class="sb-clock led" id="sb-clock">MON 00:00</span>
+      <span class="sb-status" id="sb-status">▶ 1×</span>
+      <span class="sb-saved" id="sb-saved-wrap" title="Savings on work finished in both plans: ASAP cost minus our cost, task by task">
+        <small>Saved</small><b class="led" id="sb-saved">$0</b>
+      </span>
+      <span class="sb-delta" title="Share of this week's final savings already banked"><i id="sb-delta"></i></span>
+    </div>
+  </section>
+
+  <!-- Bottom-center: event ticker -->
+  <section class="ticker" aria-live="polite" aria-label="Event log">
+    <ol id="ticker-list"></ol>
+  </section>
+
+  <!-- Bottom-left: key hints -->
+  <footer class="keys" aria-label="Keyboard shortcuts">
+    <span><kbd>Click</kbd> a rack to inspect</span>
+    <span><kbd>Space</kbd> play / pause</span>
+    <span><kbd>←</kbd><kbd>→</kbd> step an hour</span>
+    <span><kbd>Q</kbd><kbd>E</kbd> turn</span>
+    <span><kbd>Tab</kbd> our plan / ASAP</span>
+    <span><kbd>R</kbd> replay</span>
+  </footer>
+
+  <!-- Right: control panel -->
+  <button class="panel-toggle" id="panel-toggle" aria-controls="panel" aria-expanded="false">Controls</button>
+  <aside class="panel" id="panel" aria-label="Planner controls">
+    <section class="sec">
+      <div class="sec-label">
+        <span>Mode</span>
+        <span class="info" tabindex="0" aria-describedby="mode-tip">i
+          <span class="tip" role="tooltip" id="mode-tip">
+            <b>GPU cloud</b> — downtime costs the revenue you would have billed, plus SLA credits owed on contracted hours you miss.<br /><br />
+            <b>Private DC</b> — downtime costs what it would take to rent the same GPUs elsewhere. No SLA term.
+          </span>
+        </span>
+      </div>
+      <div class="seg seg-2" role="radiogroup" aria-label="Mode" id="seg-mode">
+        <button role="radio" data-value="cloud" aria-checked="true">GPU cloud</button>
+        <button role="radio" data-value="private" aria-checked="false">Private DC</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label"><span>Show in hall</span></div>
+      <div class="seg seg-2" role="radiogroup" aria-label="Plan shown in the hall" id="seg-show">
+        <button role="radio" data-value="optimized" aria-checked="true"><i class="sw sw-ours"></i>Our plan</button>
+        <button role="radio" data-value="asap" aria-checked="false"><i class="sw sw-asap"></i>ASAP</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label"><span>Backlog</span><span class="sec-aside">ours · asap · cost</span></div>
+      <ol class="ladder" id="ladder"></ol>
+      <div class="ladder-note" id="ladder-note"></div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label"><span>H100 price forecast</span><span class="sec-aside">$/GPU-hr</span></div>
+      <div class="price-chart" id="price-chart"></div>
+      <div class="caption">Seeded sample, not a live feed.</div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label"><span>Time</span><span class="sec-aside" id="time-aside">Mon 00:00</span></div>
+      <div class="seg seg-time">
+        <button id="btn-play" aria-pressed="true" title="Play / pause (Space)"><span id="play-ico">❚❚</span> <span id="play-txt">Pause</span></button>
+        <div class="seg-contents" role="radiogroup" aria-label="Speed" id="seg-speed">
+          <button role="radio" data-value="1" aria-checked="true">1×</button>
+          <button role="radio" data-value="4" aria-checked="false">4×</button>
+          <button role="radio" data-value="16" aria-checked="false">16×</button>
+        </div>
+        <button id="btn-restart" title="Replay the week (R)" aria-label="Replay the week">↺</button>
+      </div>
+      <div class="gantt" id="gantt"></div>
+      <input type="range" class="slider" id="scrub" min="0" max="168" step="0.25" value="0" aria-label="Hour of week" />
+    </section>
+
+    <section class="sec">
+      <div class="sec-label"><span>View</span></div>
+      <div class="seg seg-2">
+        <button id="btn-left">⟲ Turn left</button>
+        <button id="btn-right">Turn right ⟳</button>
+      </div>
+      <div class="seg seg-2" role="radiogroup" aria-label="Render style" id="seg-render">
+        <button role="radio" data-value="pixel" aria-checked="true">Pixel art</button>
+        <button role="radio" data-value="raw" aria-checked="false">Raw 3D</button>
+      </div>
+      <label class="slider-row">
+        <span>Pixel size</span>
+        <input type="range" class="slider" id="pixel-size" min="1" max="6" step="1" value="3" />
+        <output id="pixel-size-out">3</output>
+      </label>
+      <div class="checks">
+        <label><input type="checkbox" id="chk-outlines" checked /> Outlines</label>
+        <label><input type="checkbox" id="chk-palette" checked /> Palette</label>
+      </div>
+    </section>
+
+    <section class="sec sec-ask">
+      <div class="sec-label"><span>Ask Nemotron</span><span class="pill pill-phase">Phase 2</span></div>
+      <input class="ask" type="text" disabled placeholder="“UPS-B battery swap, 3 hrs, vendor only Wed or Fri”" aria-label="Ask Nemotron (not connected yet)" />
+      <div class="caption">Phase 2 — not connected yet.</div>
+    </section>
+  </aside>
+
+  <!-- Bottom-right: how it's priced -->
+  <details class="howto" id="howto">
+    <summary><span>How it’s priced</span><span class="plus" aria-hidden="true"></span></summary>
+    <div class="howto-body">
+      <div class="formula">
+        <div><b>cost(hour)</b> = GPUs offline × utilization(hour) × price(day)<span class="cloud-only"> × (1 + SLA)</span></div>
+        <div class="plus-line">+ risk of waiting = failure chance(days waited) × unplanned cost</div>
+      </div>
+      <p><span class="cloud-only">In <b>GPU cloud</b> mode, downtime is lost revenue and the SLA term adds credits owed on contracted hours.</span><span class="private-only">In <b>Private DC</b> mode, downtime is what it costs to rent replacement GPUs; there is no SLA term.</span></p>
+      <p>The planner tries every allowed start for every task, never overlaps two jobs in one cooling zone, and keeps the cheapest schedule. The baseline starts each job at the first business-hours slot.</p>
+      <p class="honest"><b>Honesty note.</b> The facility, backlog, utilization and risk numbers are simulated or assumed. Prices are a seeded curve based on public H100 index levels ($3.04/hr), not a live feed.</p>
+    </div>
+  </details>
+
+  <!-- Rack popover -->
+  <div class="popover" id="popover" hidden role="dialog" aria-label="Rack details"></div>
+
+  <!-- End-of-week summary -->
+  <div class="summary" id="summary" hidden role="dialog" aria-labelledby="summary-title">
+    <div class="summary-card">
+      <button class="summary-x" id="summary-close" aria-label="Close">×</button>
+      <div class="kicker">Week complete <span class="dot-sep">·</span> <span id="summary-mode"></span></div>
+      <h2 id="summary-title" class="summary-title"></h2>
+      <div class="summary-grid" id="summary-grid"></div>
+      <div class="summary-actions">
+        <button class="btn-dark" id="summary-replay">↺ Replay week</button>
+        <button class="btn-ghost" id="summary-swap">Show the other mode</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dev-errors" id="dev-errors" hidden></div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
