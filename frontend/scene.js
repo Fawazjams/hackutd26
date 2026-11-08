@@ -1006,16 +1006,20 @@ function buildHall(parent, R, anim) {
         if (r.state === 'online') r.ledMat.emissiveIntensity = (0.75 + 0.45 * Math.sin(t * r.speed + r.phase) ** 8) * (1 + night * 0.9);
         else if (r.state === 'maintenance') {
           const p = 0.5 + 0.5 * Math.sin(wall * 6 + r.phase);
-          r.body.material.emissiveIntensity = 0.4 + p * 0.9;
+          // the hall lights drop at night, so work in progress glows harder (daytime look unchanged)
+          r.body.material.emissiveIntensity = (0.4 + p * 0.9) * (1 + night * 1.4);
           r.ledMat.emissiveIntensity = 0;
           r.beacon.rotation.y = wall * 6;
+          r.beacon.scale.setScalar(1 + night * 0.45);
           r.beacon.children[0].material.color.setHex(Math.sin(wall * 10) > 0 ? C.amberHot : C.amber);
         } else r.ledMat.emissiveIntensity = 0;
-        r.status.material.emissiveIntensity = r.state === 'offline' ? (Math.sin(wall * 5) > 0 ? 1.4 : 0.2) : 1 + night;
+        r.status.material.emissiveIntensity = r.state === 'offline' ? (Math.sin(wall * 5) > 0 ? 1.4 : 0.2)
+          : r.state === 'maintenance' ? 1 + night * 2.5 : 1 + night;
       }
       for (const { fan, key } of cracFans) if (equipment.get(key)?.state !== 'maintenance') fan.rotation.x += 0.25;
       for (const e of equipment.values()) {
-        if (e.beacon.visible && e.beacon.rotation) e.beacon.rotation.y = wall * 6;
+        if (e.beacon.visible && e.beacon.rotation) { e.beacon.rotation.y = wall * 6; e.beacon.scale.setScalar(1 + night * 0.45); }
+        if (e.state === 'maintenance') for (const m of e.tint) m.emissiveIntensity = 1 + night * 1.4;
         if (e.fiber) e.fiber.emissive.setHex(e.state === 'maintenance' && Math.sin(wall * 6) > 0 ? 0x8a5a00 : 0x000000);
       }
       // zones: selection highlight (soft) and overheat (red pulse + light + embers)

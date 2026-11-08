@@ -45,6 +45,16 @@ export const planWithTasks = (mode, strategy, tasks) => request('/plan', {
   body: JSON.stringify({ mode, strategy, tasks }),
 });
 
+/** Simulated alarms Nemotron can answer on its own (GET /incidents). Offline or missing → []. */
+export async function loadIncidents() {
+  try {
+    const list = await request('/incidents');
+    return Array.isArray(list) ? list.filter(i => i && i.id && Number.isFinite(Number(i.hour))) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Everything the UI needs for one mode. Falls back to the cached snapshot if any call fails. */
 export async function loadAll(mode) {
   try {

@@ -129,6 +129,11 @@ export function createGantt(container, plans, taskOrder) {
       blocks.push({ b, id: it.task_id });
     });
   });
+  // allowed windows of one job (e.g. the task Nemotron just added), shaded behind the blocks
+  const winG = el('g', { class: 'win' });
+  svg.insertBefore(winG, blocks[0]?.b || null);
+  // priced slot options Nemotron compared for that job (drawn above the blocks)
+  const markG = el('g', { class: 'marks' }, svg);
   const head = el('line', { class: 'head', x1: padL, x2: padL, y1: 0, y2: top + laneH * 2 + gap + 3 }, svg);
   const cap = el('path', { class: 'head-cap', d: '' }, svg);
 
@@ -137,6 +142,34 @@ export function createGantt(container, plans, taskOrder) {
       const hx = x(t).toFixed(1);
       head.setAttribute('x1', hx); head.setAttribute('x2', hx);
       cap.setAttribute('d', `M${hx - 3},-4h6l-3,4z`);
+    },
+    /** Shade [{start_hour, end_hour}] across both lanes; null/[] clears. */
+    setWindows(windows) {
+      winG.replaceChildren();
+      for (const w of windows || []) {
+        if (!(w.end_hour > w.start_hour)) continue;
+        if (w.start_hour <= 0 && w.end_hour >= HOURS) continue;   // whole week: nothing to show
+        el('rect', { class: 'win-r', x: x(w.start_hour), y: top - 1, width: Math.max(1, x(w.end_hour) - x(w.start_hour)), height: laneH * 2 + gap + 2 }, winG);
+      }
+    },
+    /**
+     * Outline candidate slots [{start_hour, end_hour, safe, label, start, task_cost}] in the "Ours"
+     * lane: safe ones in teal, unsafe ones dashed grey, the chosen one (start hour) filled
+     * with a caret above it. null/[] clears.
+     */
+    setMarkers(options, chosenStart = null) {
+      markG.replaceChildren();
+      for (const o of options || []) {
+        if (!(o.end_hour > o.start_hour)) continue;
+        const chosen = chosenStart != null && o.start_hour === chosenStart;
+        const cls = `mk${o.safe === false ? ' unsafe' : ''}${chosen ? ' chosen' : ''}`;
+        const x0 = x(o.start_hour), w = Math.max(2, x(o.end_hour) - x0);
+        const r = el('rect', { class: cls, x: x0 - 0.5, y: top - 1.5, width: w + 1, height: laneH + 3, rx: 1 }, markG);
+        const t = el('title', {}, r);
+        // an unsafe option can't be placed, so its price isn't shown (it isn't comparable)
+        t.textContent = `${o.label || 'option'}: ${o.start || ''}${o.safe === false ? ', unsafe' : o.task_cost != null ? `, ${money(o.task_cost)}` : ''}`;
+        if (chosen) el('path', { class: 'mk-cap', d: `M${x0 + w / 2 - 3},${top - 6}h6l-3,4z` }, markG);
+      }
     },
     select(taskId) {
       blocks.forEach(({ b, id }) => {

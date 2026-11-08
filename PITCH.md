@@ -39,7 +39,7 @@ Read this out loud while you rehearse. Every number below comes from the merged 
 
 **Unscripted, for a judge:** "Swap the fan tray on CRAC-1, about 2 hours, any weekday afternoon" was tested live and came back clean.
 
-With Nemotron live, the trace shows real tool calls. For rehearsed requests the parsed task is pinned to the verified version, and that's disclosed below.
+With Nemotron live, the trace shows real tool calls. For rehearsed requests the parsed task is checked against the verified version and swapped for it only if Nemotron got something wrong, and that's disclosed below.
 
 ---
 
@@ -63,7 +63,7 @@ The operations lead at a GPU data center planning the week's maintenance. Honest
 We built the optimizer, the thermal sim, the cost model, the agent loop, its guardrails and the UI. We used FastAPI, Nemotron through NVIDIA's hosted API, and GetDeploying's GPU price history (CC BY 4.0, credited in the README).
 
 **3. What's mocked?**
-The hall, backlog, utilization, failure risk and thermal model are simulated, and every assumed number is labeled in `config.py`. Prices are real weekly data with our own daily forecast on top, and they're a snapshot, not a live feed. For the 3 rehearsed requests, Nemotron's parse is pinned to a verified task.
+The hall, backlog, utilization, failure risk and thermal model are simulated, and every assumed number is labeled in `config.py`. Prices are real weekly data with our own daily forecast on top, and they're a snapshot, not a live feed. For the 3 rehearsed requests, Nemotron's parse is checked against a verified task and replaced by it if they differ.
 
 **4. Hardest technical problem?**
 Making "never overheats" true by design. The optimizer runs the hour-by-hour thermal sim on every candidate slot, which still only takes about 17 ms per plan. The second hardest: keeping the LLM from ever producing a number. It only calls tools, and any explanation with a number the tools didn't return gets replaced by the code-built text.
@@ -86,8 +86,11 @@ Real telemetry instead of the simulated hall, a live price feed, a solver for bi
 **10. "Are those prices real?"**
 "The history is real: weekly H100 rental prices from 46 providers, from GetDeploying's open dataset. Today's median is about $4 an hour. That's in line with Silicon Data's public H100 index at $3.04 and the Ornn index, which went from $2.31 to $4.95 in about two months. The day-by-day forecast for this week is our model, and it's a snapshot, not a live feed."
 
-**11. Which tracks, and how do you meet them?**
-- **NVIDIA "Beyond a chatbot":** Nemotron plans and executes a multi-step workflow (lookup, windows, add task, plan, simulate, re-plan) through 7 tools, for a real operations problem.
+**11. "What does Nemotron actually decide, and what does code do?"**
+"Nemotron decides; code computes. It parses the request, then calls compare_slots, which prices every candidate slot: cheapest safe, earliest, business-hours ASAP, wait a day. Each option is a full week plan plus a hall simulation. Nemotron picks one with a reason, for example earliest safe when the operator says 'as soon as possible'. When an alarm fires, like the simulated CRAC-3 vibration alarm Wednesday 14:00, nobody types anything: Nemotron triages it, prices fixing now against waiting, and schedules the repair. Code computes every number and refuses an unsafe pick, so the model can choose but can't overheat the hall or invent a dollar figure."
+
+**12. Which tracks, and how do you meet them?**
+- **NVIDIA "Beyond a chatbot":** Nemotron plans and executes a multi-step workflow (lookup, windows, add task, compare slots, choose slot, plan, simulate, re-plan) through 9 tools, chooses between priced options, and acts on a simulated alarm with no human prompt.
 - **NMC² "keep the world running":** it catches the warning before it happens (overheat), puts the right information at the right time (priced schedule), and fixes the unclear handoff (shift brief).
 
 ---

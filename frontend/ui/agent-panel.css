@@ -65,7 +65,7 @@
 .ap-task-when { grid-column: 2; font: 500 10px var(--f-mono, ui-monospace, monospace); color: var(--ours-ink, #4F7D00); }
 .ap-task-when.ap-unsched { color: var(--asap-ink, #B8401C); }
 
-.ap-expl { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--ink, #1B1B1B); }
+.ap-expl { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--ink, #1B1B1B); white-space: pre-line; overflow-wrap: anywhere; }
 .ap-actions { margin-top: 8px; }
 .ap-btn {
   padding: 5px 9px; cursor: pointer; font: 400 8px/1 var(--f-pixel, ui-monospace, monospace);
@@ -80,3 +80,33 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .ap-wait::before { animation: none; } }
+
+/* live trace: rows arrive one by one while the stream runs */
+.ap-detail { grid-column: 3; font-size: 11.5px; line-height: 1.35; color: var(--ink-2, #4A4842); }
+.ap-pending { counter-increment: none; color: var(--ink-3, #8A867B); }
+.ap-pending::before { content: ''; }
+.ap-pending .ap-tag { color: var(--ink-3, #8A867B); border-style: dashed; }
+.ap-pending .ap-step-txt { animation: ap-pulse 1.4s ease-in-out infinite; }
+.ap-fresh { animation: ap-in .35s ease-out; }
+@keyframes ap-in { from { opacity: 0; transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .ap-pending .ap-step-txt, .ap-fresh { animation: none; } }
+
+/* simulated alarm: demo trigger + the heading of an alarm run (sentence case, safety orange) */
+.ap-alarm { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.ap-alarm-btn {
+  flex: none; height: 26px; padding: 0 10px; cursor: pointer; border-radius: var(--r, 4px);
+  font: 600 12px/1 var(--f-ui, system-ui, sans-serif); color: var(--asap-ink, #B4441A);
+  background: transparent; border: 1px solid var(--asap, #EA5B1F);
+}
+.ap-alarm-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--asap, #EA5B1F) 10%, transparent); }
+.ap-alarm-btn:focus-visible { outline: 2px solid var(--asap, #EA5B1F); outline-offset: 1px; }
+.ap-alarm-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ap-alarm-note { min-width: 0; font-size: 11px; line-height: 1.3; color: var(--ink-3, #6B7880); }
+.ap-incident {
+  margin-top: 4px; padding: 7px 8px; border-left: 3px solid var(--asap, #EA5B1F);
+  background: color-mix(in srgb, var(--asap, #EA5B1F) 7%, transparent); font-size: 11px; line-height: 1.4;
+}
+.ap-incident-h { font-weight: 600; color: var(--asap-ink, #B4441A); }
+.ap-incident-t { margin-top: 2px; font-weight: 600; color: var(--ink, #17232B); }
+.ap-incident-d { color: var(--ink-2, #3E4C55); }
+.ap-incident-src { color: var(--ink-3, #6B7880); }

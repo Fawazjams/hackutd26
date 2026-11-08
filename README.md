@@ -32,6 +32,9 @@ GPU compute now has a market price that moves day to day, so every hour of plann
    POST /plan        optimized | asap schedule + $    planner.py
    POST /simulate    hourly racks, zone temps, violations   simulate.py
    POST /request     Nemotron agent loop              agent.py
+   POST /request/stream  same run, NDJSON events live  agent.py
+   GET  /incidents   simulated alarms (ASSUMED)       incidents.py
+   POST /incident/stream  alarm -> Nemotron triages + schedules the repair, no operator  agent.py
    POST /handoff     shift handoff brief              agent.py
         │  tool calls (OpenAI-compatible API)
         ▼
@@ -44,8 +47,9 @@ GPU compute now has a market price that moves day to day, so every hour of plann
 | Requirement | How we meet it |
 |---|---|
 | Beyond a chatbot | Nemotron turns a plain-English request into a scheduled task in the plan and a work handoff, not a chat reply |
-| Multi-step workflows | Nemotron chains lookup → windows → add task → plan → simulate, and re-plans when the simulator reports violations |
-| Tool integration | 7 tools backed by our planner, simulator and price service, called through Nemotron's function calling |
+| Multi-step workflows | Nemotron chains lookup → windows → add task → compare slots → choose slot → plan → simulate, and re-plans when the simulator reports violations |
+| Decides, not just parses | Nemotron picks the slot among priced options (each a full week plan + hall sim); code refuses unsafe picks. A simulated alarm (CRAC-3, Wed 14:00) triggers it with no human prompt |
+| Tool integration | 9 tools backed by our planner, simulator and price service, called through Nemotron's function calling |
 | Real-world applicability | Maintenance scheduling with vendor windows, cooling redundancy and SLA exposure |
 
 **NMC²: Keep the World Running**
@@ -75,7 +79,7 @@ Price data: GetDeploying, GPU rental price history, https://getdeploying.com/gpu
 - Prices: the **history is real** (GetDeploying weekly H100 on-demand prices from 46 providers: median of 128 offerings $4.02/GPU-hr on 2026-11-02, per-provider median $3.96, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - CME/Silicon Data and ICE/Ornn have **announced** GPU compute futures. We don't claim they are trading, and we don't claim NMC² uses this market.
-- For the 3 rehearsed demo requests, the parsed task is pinned to a pre-checked version, so the demo is identical every run. Unscripted requests use Nemotron's parse as-is.
+- For the 3 rehearsed demo requests, Nemotron's parsed task is checked against a pre-checked version and replaced by it only if they differ (the trace then shows `guardrail:pinned_demo_task`), so the demo is identical every run. Unscripted requests use Nemotron's parse as-is.
 - The optimizer enforces vendor windows and same-zone conflicts, and rejects any slot that pushes a zone over 32 °C **in our own (assumed) thermal sim**. "Never overheats" means never in that sim. The ASAP baseline is deliberately unchecked. The hall view may be a 2D placeholder.
 - Savings figures (**$[X]**) depend on the assumed cost model and will be filled in from the final build.
 
