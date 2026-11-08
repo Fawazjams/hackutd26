@@ -1127,61 +1127,226 @@ function createProviders(scene) {
     return s;
   }
 
+  // same LED dot pattern as the main hall's rack faces
+  const dots = canvasTexture(16, 32, (c, w, h) => {
+    c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+    for (let y = 2; y < h - 2; y += 3) for (let x = 2; x < w - 2; x += 3) {
+      const r = (x * 7 + y * 13) % 5;
+      c.fillStyle = r === 0 ? '#ffffff' : r === 1 ? '#9a9a9a' : r === 2 ? '#5a5a5a' : '#000';
+      c.fillRect(x, y, 1, 1);
+    }
+  });
+  const tileTex = canvasTexture(16, 16, (c, w, h) => {
+    c.fillStyle = '#e4dfd3'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#cfc8b8'; c.fillRect(0, 0, w, 1); c.fillRect(0, 0, 1, h);
+  }, [14, 10]);
+  const perfTex = canvasTexture(8, 8, (c, w, h) => {
+    c.fillStyle = '#a9cfe9'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#7fb0d6'; for (let i = 1; i < w; i += 2) for (let j = 1; j < h; j += 2) c.fillRect(i, j, 1, 1);
+  }, [8, 1]);
+
+  function signTex(name, roof) {
+    return canvasTexture(128, 32, (c, w, h) => {
+      c.fillStyle = '#1b1b1b'; c.fillRect(0, 0, w, h);
+      c.fillStyle = `#${roof.toString(16).padStart(6, '0')}`; c.fillRect(0, h - 3, w, 3);
+      c.fillStyle = '#f7f4ec'; c.font = 'bold 15px monospace'; c.textBaseline = 'middle';
+      c.fillText(name.toUpperCase().slice(0, 15), 6, h / 2 - 1);
+    });
+  }
+
   function build(id, name) {
     const g = new THREE.Group();
     const R = rng(id.length * 977 + id.charCodeAt(0));
-    const W = 26, D = 20;
+    const W = 34, D = 26;
     const roof = ROOF[id] ?? 0x2f8f7b;
+    // island: grass cap, cliff face, stepped strata tapering to a rocky point
     box(W, 1.0, D, mat(C.grass), 0, -0.5, 0, g);
-    const layers = [[W, 1.4, D, C.soil, -1.7], [W - 4, 1.8, D - 4, C.rock, -3.3],
-      [W - 10, 2.0, D - 9, C.rockDark, -5.2], [W - 17, 2.2, D - 14, C.rock, -7.3], [W - 22, 2.0, D - 17, C.rockDark, -9.3]];
+    box(W - 1.6, 0.2, D - 1.6, mat(C.grassDark), 0, -1.05, 0, g);
+    const layers = [[W, 1.4, D, C.soil, -1.7], [W - 0.5, 1.0, D - 0.5, 0x8a6142, -2.9], [W - 4, 1.8, D - 4, C.rock, -4.3],
+      [W - 10, 2.0, D - 9, C.rockDark, -6.2], [W - 17, 2.2, D - 14, C.rock, -8.3], [W - 24, 2.0, D - 19, C.rockDark, -10.3],
+      [W - 29, 1.8, D - 22, C.rock, -12.1]];
     for (const [w, h, d, c, y] of layers) box(w, h, d, mat(c), 0, y, 0, g);
-    for (let i = 0; i < 10; i++) {
-      const s = 1 + R() * 1.6;
-      box(s, s, s, mat(R() < 0.5 ? C.rock : C.rockDark), (R() - 0.5) * (W - 6), -3 - R() * 4,
-        (R() < 0.5 ? -1 : 1) * (D / 2 - 3), g).rotation.y = R() * 3;
+    for (let i = 0; i < 16; i++) {
+      const s = 1 + R() * 2;
+      const side = R() < 0.5;
+      const along = (R() - 0.5);
+      const x = side ? along * (W - 8) : (R() < 0.5 ? -1 : 1) * (W / 2 - 3 - R() * 4);
+      const z = side ? (R() < 0.5 ? -1 : 1) * (D / 2 - 3 - R() * 3) : along * (D - 8);
+      box(s, s * (0.7 + R() * 0.6), s, mat(R() < 0.5 ? C.rock : C.rockDark), x, -4 - R() * 6, z, g).rotation.y = R() * 3;
     }
-    box(18, 0.25, 12, mat(C.concrete), 0, 0.12, 0, g);
-    const wall = mat(C.wall);
-    box(16, 3.2, 0.3, wall, 0, 1.6, -5.4, g);
-    box(0.3, 3.2, 11, wall, -8, 1.6, 0, g);
-    box(0.3, 3.2, 11, wall, 8, 1.6, 0, g);
-    box(16.4, 0.5, 0.5, mat(roof), 0, 3.4, -5.4, g);
-    box(0.5, 0.5, 11.4, mat(roof), -8, 3.4, 0, g);
-    box(0.5, 0.5, 11.4, mat(roof), 8, 3.4, 0, g);
-    const led = new THREE.MeshLambertMaterial({ color: 0x0b0d10, emissive: C.led, emissiveIntensity: 0.9 });
-    for (const z of [-2, 2]) for (let i = 0; i < 6; i++) {
-      const x = -6 + i * 2.4;
-      box(1.4, 2.4, 1.2, mat(C.rack), x, 1.45, z, g);
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.0), led);
-      p.position.set(x, 1.45, z + 0.61);
-      g.add(p);
+    // concrete apron, chiller yard and trees outside the hall
+    box(26, 0.25, 18, mat(C.concrete), 0, 0.12, -0.5, g);
+    box(22, 0.3, 4, mat(C.concreteDark), 0, 0.15, -10.5, g);
+    const fanMat = mat(C.steelDark);
+    const fans = [];
+    for (let i = 0; i < 4; i++) {
+      const x = -8.25 + i * 5.5;
+      box(4, 1.8, 3, mat(C.white), x, 1.2, -10.5, g);
+      box(4.1, 0.2, 3.1, mat(C.steel), x, 2.2, -10.5, g);
+      cyl(0.8, 0.8, 0.15, fanMat, x, 2.35, -10.5, g, 12);
+      fans.push(box(1.4, 0.06, 0.24, fanMat, x, 2.45, -10.5, g));
     }
-    box(0.25, 5, 0.25, mat(C.steelDark), 7, 2.5, 4.5, g);
+    for (let i = 0; i < 9; i++) {
+      const x = (R() - 0.5) * (W - 4), z = (R() < 0.5 ? -1 : 1) * (D / 2 - 1.5);
+      if (Math.abs(x) < 4 && z > 0) continue;
+      const s = 0.6 + R() * 0.5;
+      box(0.35 * s, 1.0 * s, 0.35 * s, mat(C.trunk), x, 0.5 * s, z, g);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(1.2 * s, 2.8 * s, 6), mat(R() < 0.5 ? C.pine : C.pineDark));
+      cone.position.set(x, 1.0 * s + 1.4 * s, z); cone.castShadow = true; g.add(cone);
+    }
+
+    // hall: raised tiled floor, cold aisles, hot aisle with containment glass
+    const Y = 0.62, HX = 22, HZ = 14;
+    box(HX + 0.4, 0.5, HZ + 0.4, mat(C.concreteDark), 0, 0.37, 0, g);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HX, HZ), new THREE.MeshLambertMaterial({ map: tileTex }));
+    floor.rotation.x = -Math.PI / 2; floor.position.y = Y; floor.receiveShadow = true; g.add(floor);
+    for (const z of [-3.6, 3.6]) {
+      const a = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.6), new THREE.MeshLambertMaterial({ map: perfTex }));
+      a.rotation.x = -Math.PI / 2; a.position.set(-1, Y + 0.01, z); g.add(a);
+    }
+    const hot = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.6), new THREE.MeshLambertMaterial({ color: C.hot }));
+    hot.rotation.x = -Math.PI / 2; hot.position.set(-1, Y + 0.01, 0); g.add(hot);
+    const glass = new THREE.MeshLambertMaterial({ color: 0xffc59a, transparent: true, opacity: 0.35, depthWrite: false });
+    for (const x of [-8.3, 6.3]) box(0.08, 2.4, 1.6, glass, x, Y + 1.2, 0, g).castShadow = false;
+
+    // 2 rows x 7 racks facing the cold aisles, with dotted LED faces, top caps and status LEDs
+    const racks = [];
+    const RW = 1.5, RH = 2.4, RD = 1.3;
+    for (const rz of [-1.7, 1.7]) for (let i = 0; i < 7; i++) {
+      const x = -7 + i * 2.0;
+      box(RW, RH, RD, mat(C.rack), x, Y + RH / 2, rz, g);
+      box(RW + 0.04, 0.07, RD + 0.04, mat(C.rackTop), x, Y + RH + 0.035, rz, g);
+      const ledMat = new THREE.MeshLambertMaterial({ color: 0x0b0d10, emissive: C.led, emissiveMap: dots, emissiveIntensity: 1 });
+      for (const s of [-1, 1]) {
+        const p = new THREE.Mesh(new THREE.PlaneGeometry(RW * 0.82, RH * 0.86), ledMat);
+        p.position.set(x, Y + RH / 2, rz + s * (RD / 2 + 0.011));
+        if (s < 0) p.rotation.y = Math.PI;
+        g.add(p);
+      }
+      const face = rz < 0 ? -1 : 1;
+      box(0.15, 0.15, 0.05, new THREE.MeshLambertMaterial({ color: 0x111111, emissive: C.led }),
+        x + RW * 0.3, Y + RH - 0.2, rz + face * (RD / 2 + 0.03), g).castShadow = false;
+      racks.push({ ledMat, phase: R() * 10, speed: 1.5 + R() * 3 });
+    }
+    // overhead fibre trays + busway per row
+    for (const rz of [-1.7, 1.7]) {
+      box(15, 0.15, 0.55, mat(C.yellow), -1, Y + RH + 0.7, rz - 0.25, g).castShadow = false;
+      box(15, 0.18, 0.25, mat(C.busway), -1, Y + RH + 1.0, rz + 0.3, g).castShadow = false;
+    }
+    // CRAC units (west wall), CDU + PDU (row ends), UPS cabinets and a NOC desk
+    for (const rz of [-3.6, 3.6]) {
+      box(1.3, 2.8, 2.4, mat(0xe8e4da), -10, Y + 1.4, rz, g);
+      box(1.32, 0.4, 2.42, mat(roof), -10, Y + 2.6, rz, g);
+      box(0.05, 1.4, 1.8, mat(0x8b9097), -9.33, Y + 1.2, rz, g);
+    }
+    for (const rz of [-1.7, 1.7]) {
+      box(0.8, 2.0, 1.2, mat(0x4b5058), -8.9, Y + 1.0, rz, g);
+      box(1.0, 2.2, 1.3, mat(0xdfe6ec), 7.1, Y + 1.1, rz, g);
+      cyl(0.11, 0.11, 2.2, mat(0x4a8fd1), 7.7, Y + 1.1, rz - 0.3, g, 6);
+      cyl(0.11, 0.11, 2.2, mat(0xd1574a), 7.7, Y + 1.1, rz + 0.3, g, 6);
+    }
+    for (let j = -1; j <= 1; j++) box(1.0, 1.9, 0.8, mat(0x3b4048), 9.6, Y + 0.95, -4.4 + j * 0.95, g);
+    box(2.6, 0.8, 0.9, mat(0x6d5a48), 9.4, Y + 0.4, 4.6, g);
+    const screen = new THREE.MeshLambertMaterial({ color: 0x0c1a12, emissive: roof, emissiveIntensity: 0.9 });
+    for (let k = 0; k < 2; k++) box(1.0, 0.65, 0.06, screen, 8.9 + k * 1.05, Y + 1.7, 6.6, g).castShadow = false;
+    const staff = person(C.shirt); staff.position.set(9.4, Y, 3.7); staff.rotation.y = Math.PI; g.add(staff);
+
+    // walls: dollhouse style (back + sides full height, front low) with roof trim and a company sign
+    const wallTex = canvasTexture(32, 32, (c, w, h) => {
+      c.fillStyle = '#efe9dc'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#e2dbcb'; for (let y = 0; y < h; y += 8) c.fillRect(0, y, w, 1);
+    }, [4, 1]);
+    const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    const WH = 4.2;
+    box(HX, WH, 0.3, wallMat, 0, Y + WH / 2, -HZ / 2 + 0.15, g);
+    box(0.3, WH, HZ, wallMat, -HX / 2 + 0.15, Y + WH / 2, 0, g);
+    box(0.3, WH, HZ, wallMat, HX / 2 - 0.15, Y + WH / 2, 0, g);
+    box(HX, 0.7, 0.3, wallMat, 0, Y + 0.35, HZ / 2 - 0.15, g);
+    box(HX + 0.2, 0.3, 0.5, mat(roof), 0, Y + WH + 0.15, -HZ / 2 + 0.15, g);
+    box(0.5, 0.3, HZ + 0.2, mat(roof), -HX / 2 + 0.15, Y + WH + 0.15, 0, g);
+    box(0.5, 0.3, HZ + 0.2, mat(roof), HX / 2 - 0.15, Y + WH + 0.15, 0, g);
+    const st = signTex(name, roof);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshLambertMaterial({ map: st, emissive: 0xffffff, emissiveMap: st, emissiveIntensity: 0.25 }));
+    sign.position.set(-3, Y + 2.6, -HZ / 2 + 0.32);
+    g.add(sign);
+    const strip = new THREE.MeshLambertMaterial({ color: 0xfffbe8, emissive: 0xfff1c4, emissiveIntensity: 0.6 });
+    for (const z of [-3.6, 0, 3.6]) box(14, 0.1, 0.3, strip, -1, Y + RH + 1.6, z, g).castShadow = false;
+
+    // status mast + beacon (talking / deal / no deal)
+    box(0.25, 6, 0.25, mat(C.steelDark), HX / 2 - 1, 3.6, HZ / 2 - 1, g);
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), beaconMat);
-    beacon.position.set(7, 5.6, 4.5);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 10), beaconMat);
+    beacon.position.set(HX / 2 - 1, 7.1, HZ / 2 - 1);
     g.add(beacon);
-    const light = new THREE.PointLight(0xffc14d, 0, 26, 1.6);
-    light.position.set(0, 7, 0);
+    const light = new THREE.PointLight(0xffc14d, 0, 30, 1.6);
+    light.position.set(0, 8, 0);
     g.add(light);
     const tag = label(name);
-    tag.position.set(0, 11, 0);
+    tag.position.set(0, 13, 0);
     g.add(tag);
     g.traverse(o => { o.raycast = () => {}; });   // never picked as a rack
-    return { group: g, beaconMat, light, state: 'idle' };
+    return { group: g, beaconMat, light, racks, fans, state: 'idle' };
   }
 
-  // ---- negotiator drone
+  // ---- negotiator drone (styled after a delivery drone: rounded white fuselage, ducted rear fan,
+  // side rotor pods, small fins, antenna; carries the contract back on a tether)
   const drone = new THREE.Group();
-  const dMat = new THREE.MeshLambertMaterial({ color: 0x76b900, emissive: 0x76b900, emissiveIntensity: 0.9 });
-  box(1.4, 0.5, 1.4, dMat, 0, 0, 0, drone);
-  box(0.5, 0.35, 0.5, mat(C.ink), 0, -0.4, 0, drone);
-  const rotor = new THREE.Group();
-  box(3.4, 0.08, 0.3, mat(C.ink), 0, 0, 0, rotor);
-  box(0.3, 0.08, 3.4, mat(C.ink), 0, 0, 0, rotor);
-  rotor.position.y = 0.45;
-  drone.add(rotor);
+  const body = new THREE.Group();          // nose points +x; the whole drone yaws toward its target
+  drone.add(body);
+  const shell = new THREE.MeshLambertMaterial({ color: 0xf4f3ee });
+  const shellShade = new THREE.MeshLambertMaterial({ color: 0xdcdad3 });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x23262b });
+  const fus = new THREE.Mesh(new THREE.CapsuleGeometry(0.85, 2.6, 6, 14), shell);
+  fus.rotation.z = Math.PI / 2; fus.scale.set(1, 1, 0.82);   // long axis along x, slightly flattened
+  fus.castShadow = true; body.add(fus);
+  box(3.0, 0.28, 1.5, shellShade, -0.1, -0.62, 0, body);                 // belly pan
+  box(2.4, 0.06, 0.08, dark, 0.1, 0.78, 0, body);                        // top seam
+  box(0.18, 0.5, 1.0, dark, 2.25, 0.05, 0, body);                        // nose sensor window
+  // ducted fan at the tail with a hex-grille face
+  const duct = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.22, 10, 24), shell);
+  duct.rotation.y = Math.PI / 2; duct.position.set(-2.55, 0.05, 0); body.add(duct);
+  const grilleTex = canvasTexture(32, 32, (c, w, h) => {
+    c.fillStyle = '#9aa3ab'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#2a2d31';
+    for (let y = 0; y < h; y += 4) for (let x = (y / 4) % 2 ? 2 : 0; x < w; x += 4) c.fillRect(x, y, 2, 2);
+  });
+  const grille = new THREE.Mesh(new THREE.CircleGeometry(0.82, 20),
+    new THREE.MeshLambertMaterial({ map: grilleTex, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  grille.rotation.y = -Math.PI / 2; grille.position.set(-2.72, 0.05, 0); body.add(grille);
+  const tailFan = new THREE.Group();
+  box(0.05, 1.4, 0.18, dark, 0, 0, 0, tailFan);
+  box(0.05, 0.18, 1.4, dark, 0, 0, 0, tailFan);
+  tailFan.position.set(-2.5, 0.05, 0); body.add(tailFan);
+  // side rotor pods near the nose
+  const pods = [];
+  for (const s of [-1, 1]) {
+    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.5, 14), shell);
+    pod.rotation.x = Math.PI / 2; pod.position.set(1.3, -0.05, s * 1.1); body.add(pod);
+    const hub = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), dark);
+    hub.position.set(1.3, -0.05, s * 1.36); if (s < 0) hub.rotation.y = Math.PI; body.add(hub);
+    const prop = new THREE.Group();
+    box(0.7, 0.08, 0.04, dark, 0, 0, 0, prop);
+    prop.position.set(1.3, -0.05, s * 1.38); body.add(prop);
+    pods.push(prop);
+  }
+  // downward fins front and rear, antenna on top
+  for (const [x, z] of [[1.6, -0.5], [1.6, 0.5], [-1.9, -0.45], [-1.9, 0.45]]) {
+    const fin = box(0.55, 0.55, 0.1, shellShade, x, -0.95, z, body);
+    fin.rotation.z = x > 0 ? 0.35 : -0.35;
+  }
+  cyl(0.03, 0.03, 0.9, dark, -0.3, 1.2, 0, body, 6);
+  // NVIDIA-green running light under the nose
+  const runMat = new THREE.MeshBasicMaterial({ color: 0x76b900 });
+  box(0.5, 0.06, 0.6, runMat, 1.5, -0.78, 0, body);
+  // tethered parcel (the contract), shown on the flight home after a deal
+  const tether = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 2.4, 4), dark);
+  tether.position.set(0, -1.9, 0); drone.add(tether);
+  const parcel = new THREE.Group();
+  box(0.9, 0.7, 0.9, mat(0xc79a5b), 0, 0, 0, parcel);
+  box(0.92, 0.12, 0.3, mat(0xa77c43), 0, 0.2, 0, parcel);
+  parcel.position.set(0, -3.4, 0); drone.add(parcel);
+  tether.visible = parcel.visible = false;
+  drone.scale.setScalar(1.15);
   const dLight = new THREE.PointLight(0x9cff4a, 0, 18, 1.5);
   drone.add(dLight);
   drone.visible = false;
@@ -1202,7 +1367,7 @@ function createProviders(scene) {
 
   function hover(id) {
     const isl = islands.get(id);
-    return isl ? isl.base.clone().add(new THREE.Vector3(0, 13, 0)) : HOME.clone();
+    return isl ? isl.base.clone().add(new THREE.Vector3(0, 17, 0)) : HOME.clone();
   }
 
   return {
@@ -1233,7 +1398,12 @@ function createProviders(scene) {
       if (flight) { const f = flight; flight = null; f.resolve(); }
       drone.visible = true;
       drone.position.copy(from);
-      return new Promise(resolve => { flight = { from, to, t0: now(), dur: 1.6, resolve, back: !out }; });
+      // carry the contract home only if a deal was struck
+      const carrying = !out && [...islands.values()].some(e => e.state === 'deal');
+      tether.visible = parcel.visible = carrying;
+      const dx = to.x - from.x, dz = to.z - from.z;
+      if (dx * dx + dz * dz > 1) drone.rotation.y = Math.atan2(-dz, dx);   // nose (+x) toward the target
+      return new Promise(resolve => { flight = { from, to, t0: now(), dur: 1.8, resolve, back: !out }; });
     },
     tick(t) {
       const dt = Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
@@ -1248,6 +1418,8 @@ function createProviders(scene) {
         }
         e.group.scale.setScalar(Math.max(0.001, k));
         e.group.position.set(e.base.x, e.base.y + dy + Math.sin(t * 0.8 + e.base.x) * 0.4, e.base.z);
+        for (const r of e.racks) r.ledMat.emissiveIntensity = 0.75 + 0.45 * Math.sin(t * r.speed + r.phase) ** 8;
+        for (const f of e.fans) f.rotation.y += dt * 9;
         const pulse = 0.5 + 0.5 * Math.sin(t * 7);
         if (e.state === 'talking') { e.beaconMat.color.setHex(pulse > 0.5 ? 0xffc14d : 0xf2a33a); e.light.color.setHex(0xffc14d); e.light.intensity = 40 + 60 * pulse; }
         else if (e.state === 'deal') { e.beaconMat.color.setHex(0x76b900); e.light.color.setHex(0x76b900); e.light.intensity = 90; }
@@ -1259,14 +1431,19 @@ function createProviders(scene) {
         const s = f * f * (3 - 2 * f);
         drone.position.lerpVectors(flight.from, flight.to, s);
         drone.position.y += Math.sin(Math.PI * s) * 12;      // arc
+        body.rotation.z = Math.cos(Math.PI * s) * 0.18;      // pitch up on the climb, down on the descent
         if (f >= 1) {
           const done = flight; flight = null;
-          if (done.back) drone.visible = false;
+          body.rotation.z = 0;
+          if (done.back) { drone.visible = false; tether.visible = parcel.visible = false; }
           done.resolve();
         }
       }
       if (drone.visible) {
-        rotor.rotation.y = t * 30;
+        tailFan.rotation.x = t * 40;
+        for (const p of pods) p.rotation.z = t * 45;
+        if (!flight) drone.position.y += Math.sin(t * 2.2) * 0.01;   // gentle hover
+        parcel.rotation.y = Math.sin(t * 1.5) * 0.3;
         dLight.intensity = 30;
         if (flight && t - lastDrop > 0.05) {
           lastDrop = t;
