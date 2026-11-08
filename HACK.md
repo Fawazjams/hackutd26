@@ -24,7 +24,7 @@ Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21
 
 ## Task board (deadline Sun 09:00; Harden phase: finish the journey, no extras)
 **P0: before 01:00 (MVP becomes demo-complete)**
-- [ ] Loki: register team on Devpost by **23:00** (paste docs/DEVPOST.md)
+- [x] Loki: register team on Devpost by **23:00** (temporary draft submitted) (paste docs/DEVPOST.md)
 - [x] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
 - [x] Nandhan: thermal-aware optimizer: reject any plan where `simulate.find_conflicts`/`simulate_plan` reports violations (or add a neighbor-cooling rule), so "optimized never overheats" is true by design.
 - [x] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
