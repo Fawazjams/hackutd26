@@ -94,6 +94,14 @@
   <div class="view view-hall-root" id="view-hall" role="tabpanel" aria-labelledby="nav-hall">
   <!-- 3D hall (scene.js) or the 2D placeholder renders in here -->
   <div id="stage" aria-label="GPU hall diorama">
+    <!-- sky behind the island: gradient follows the day/night clock (scene.js sets --sky-top / --sky) -->
+    <div class="sky" aria-hidden="true"><div class="clouds">
+      <i class="cloud" style="--w:260px; --y:8%;  --t:150s; --d:-20s;  --o:.85"></i>
+      <i class="cloud" style="--w:180px; --y:22%; --t:120s; --d:-75s;  --o:.7"></i>
+      <i class="cloud" style="--w:320px; --y:64%; --t:180s; --d:-40s;  --o:.6"></i>
+      <i class="cloud" style="--w:150px; --y:80%; --t:110s; --d:-95s;  --o:.65"></i>
+      <i class="cloud" style="--w:220px; --y:40%; --t:160s; --d:-130s; --o:.55"></i>
+    </div></div>
     <div class="stage-loading" id="stage-loading"><span class="spinner" aria-hidden="true"></span>Building the hall…</div>
   </div>
 

@@ -887,3 +887,21 @@ body:not(.view-hall) #stage { visibility: hidden; }
 
 /* Details: the three sections on one scrolling page */
 .details-sec + .details-sec { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--rule); }
+
+/* ---------- Sky behind the island: gradient + a few soft clouds, faint where they pass the island ---------- */
+.sky { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background: linear-gradient(to bottom, var(--sky-top, #9fcdee) 0%, var(--sky, #dcedf7) 72%); }
+#stage canvas { position: relative; z-index: 1; }
+.clouds { position: absolute; inset: 0;
+  /* the island sits mid-stage: clouds drop to ~12% there, full strength toward the edges */
+  -webkit-mask-image: radial-gradient(ellipse 36% 42% at 50% 54%, rgba(0, 0, 0, .12) 60%, #000 100%);
+          mask-image: radial-gradient(ellipse 36% 42% at 50% 54%, rgba(0, 0, 0, .12) 60%, #000 100%); }
+.cloud { position: absolute; left: 0; top: var(--y); width: var(--w); height: calc(var(--w) * .4);
+  opacity: calc(var(--o) * var(--cloud-alpha, 1)); filter: blur(5px);
+  background:
+    radial-gradient(closest-side at 28% 66%, #fff 62%, transparent),
+    radial-gradient(closest-side at 52% 42%, #fff 66%, transparent),
+    radial-gradient(closest-side at 76% 64%, #fff 58%, transparent);
+  animation: cloud-drift var(--t) linear var(--d) infinite; }
+@keyframes cloud-drift { from { transform: translateX(-110%); } to { transform: translateX(100vw); } }
+@media (prefers-reduced-motion: reduce) { .cloud { animation-play-state: paused; } }

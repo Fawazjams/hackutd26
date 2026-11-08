@@ -375,8 +375,13 @@ export async function createDataCenter(containerEl) {
     outside.setNight(state.night);
     // tint the stage itself: cream by day, dusk lavender at night (kept light so overlay text stays readable)
     // page ground: drafting vellum by day, a cool dusk at night (light enough for the ink text)
-    const sky = new THREE.Color(0xe8ecec).lerp(new THREE.Color(0xc2cad6), state.night * 0.9);
-    document.documentElement.style.setProperty('--sky', `#${sky.getHexString()}`);
+    // sky: soft blue by day, dusk blue at night (kept light near the ground so overlay text stays readable)
+    const sky = new THREE.Color(0xdcedf7).lerp(new THREE.Color(0xb8c3d8), state.night * 0.9);
+    const skyTop = new THREE.Color(0x9fcdee).lerp(new THREE.Color(0x4f6290), state.night * 0.9);
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--sky', `#${sky.getHexString()}`);
+    rootStyle.setProperty('--sky-top', `#${skyTop.getHexString()}`);
+    rootStyle.setProperty('--cloud-alpha', (1 - state.night * 0.65).toFixed(3));
   }
 
   let last = performance.now(), animT = 0, raf = 0, disposed = false;

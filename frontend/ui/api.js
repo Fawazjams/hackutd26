@@ -2,7 +2,7 @@
 // Order: same origin (when FastAPI serves the page) -> http://localhost:8000 -> cached snapshot.
 import { FALLBACK } from '../fallback-plans.js';
 
-const TIMEOUT_MS = 2500;
+const TIMEOUT_MS = 8000;   // generous: a busy 3D first frame on a slow laptop must not flip the UI to "offline"
 const sameOrigin = location.protocol.startsWith('http') ? [''] : [];
 const BASES = [...new Set([...sameOrigin, 'http://localhost:8000'])];
 let workingBase = null;
