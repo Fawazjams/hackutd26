@@ -67,13 +67,16 @@ python scripts/nemotron_check.py --list                # which Nemotron models y
 
 **Deterministic.** Everything is seeded (`SEED = 42`), so the same inputs give the same plan and the same dollar figures every run.
 
+## Data credit
+Price data: GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0. Dataset: https://getdeploying.com/dataset/gpu-prices
+
 ## Honesty
 - The facility, backlog, telemetry, utilization and failure-risk numbers are **simulated or assumed**. Every invented number is labeled `ASSUMED` in `backend/app/config.py` / `stubs.py`.
-- Prices: the **history is real** (GetDeploying weekly H100 on-demand median across ~46 providers, $4.02/GPU-hr on 2026-11-02, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
+- Prices: the **history is real** (GetDeploying weekly H100 on-demand prices from 46 providers: median of 128 offerings $4.02/GPU-hr on 2026-11-02, per-provider median $3.96, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - CME/Silicon Data and ICE/Ornn have **announced** GPU compute futures. We don't claim they are trading, and we don't claim NMC² uses this market.
 - For the 3 rehearsed demo requests, the parsed task is pinned to a pre-checked version, so the demo is identical every run. Unscripted requests use Nemotron's parse as-is.
-- The optimizer enforces vendor windows and same-zone conflicts. Temperature limits are checked by the simulator. The hall view may be a 2D placeholder.
+- The optimizer enforces vendor windows and same-zone conflicts, and rejects any slot that pushes a zone over 32 °C **in our own (assumed) thermal sim**. "Never overheats" means never in that sim. The ASAP baseline is deliberately unchecked. The hall view may be a 2D placeholder.
 - Savings figures (**$[X]**) depend on the assumed cost model and will be filled in from the final build.
 
 ## Team

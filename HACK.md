@@ -24,21 +24,21 @@ Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21
 
 ## Task board (deadline Sun 09:00; Harden phase: finish the journey, no extras)
 **P0: before 01:00 (MVP becomes demo-complete)**
-- [ ] Loki: register team on Devpost by **23:00** (paste docs/DEVPOST.md)
-- [ ] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
+- [x] Loki: register team on Devpost by **23:00** (temporary draft submitted) (paste docs/DEVPOST.md)
+- [x] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
 - [x] Nandhan: thermal-aware optimizer: reject any plan where `simulate.find_conflicts`/`simulate_plan` reports violations (or add a neighbor-cooling rule), so "optimized never overheats" is true by design.
-- [ ] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
+- [x] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
 - [x] ~~Loki: make the daily price curve drive decisions~~ superseded by real prices (see status log) (savings should come mostly from price, not invented utilization dips); flatten/dampen utilization dips; re-run test_optimized_beats_asap and regenerate fallback-plans.js.
 
 **P1: before 04:00 (polish that judges see)**
 - [x] Nandhan: 3D hall (scene.js): racks go dark on schedule, zones glow red on overheat during ASAP playback.
-- [ ] Loki: agent re-plan for real: when the new task causes a violation, Nemotron sees it from `simulate` and re-plans (needs thermal-aware planner); trace shows the re-plan.
-- [ ] Loki (NMC² "unclear handoff"): `/handoff`: Nemotron writes a shift handoff / work order per scheduled task from tool numbers only (what, when, racks, zone temps to watch, risk if delayed). Button in the UI.
+- [x] Loki: agent re-plan for real: when the new task causes a violation, Nemotron sees it from `simulate` and re-plans (needs thermal-aware planner); trace shows the re-plan.
+- [x] Loki (NMC² "unclear handoff"): `/handoff`: Nemotron writes a shift handoff / work order per scheduled task from tool numbers only (what, when, racks, zone temps to watch, risk if delayed). Button in the UI.
 - [x] Nandhan: end-of-week summary shows $ saved and "0 overheats vs 5" side by side.
 
 **P2: 04:00-06:00 harden**
 - [ ] Both: rehearse 3 scripted + 1 unscripted request; same output every run; kill Wi-Fi once and confirm fallback.
-- [ ] Loki: README (run steps, architecture, honesty), secret scan (no keys in git).
+- [ ] Loki: ~~README~~ (done) · secret scan (no keys in git).
 
 **P3: 06:00-08:30 present**
 - [ ] Loki: 2-min video (docs/DEMO_SCRIPT.md), final Devpost with real $ figures.
@@ -94,8 +94,8 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 | Assumption | Starting value | Why it's reasonable | Source |
 |---|---|---|---|
 | Hall size | 40 racks × 32 H100 = 1,280 GPUs | Typical scale for an AI hall row set | None (assumed) |
-| Price forecast | Real H100 on-demand median $4.02/hr (Nov 2, 2026) + 8-week trend; 90% band from 26-week volatility | History is real; the daily forecast is our model | [GetDeploying dataset](https://getdeploying.com/gpu-price-trends) |
-| Hourly utilization | 85–98%, small dips | AI clusters run near full; dips at job boundaries | None (assumed) |
+| Price forecast | Real H100 on-demand median $4.02/hr (median of 128 offerings from 46 providers, Nov 2, 2026; per-provider median $3.96) + 8-week trend; 90% band from 26-week volatility | History is real; the daily forecast is our model | [GetDeploying dataset](https://getdeploying.com/gpu-price-trends) |
+| Hourly utilization | 93–96%, brief dips to 92–93% | AI clusters run near full; dips at job boundaries | None (assumed) |
 | Risk growth while a task waits | +0.5–2%/day failure chance, by task | Deferred maintenance raises failure odds | None (assumed) |
 | Unplanned failure cost | 3× planned downtime + emergency premium | Unplanned outages run longer and cost more | None (assumed) |
 | Contracted share (GPU-cloud mode) | 70% contracted / 30% open market | Neoclouds pre-sell most capacity | Direction: CoreWeave backlog; value assumed |
@@ -120,19 +120,24 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 - Higgsfield CLI for visuals (undecided).
 
 ## Tasks to check early (first 1–2 hours)
-- [ ] **Nemotron tool calling on build.nvidia.com:** pick the model, test a 3-tool loop, and check the rate limit (reported ~40 requests/min, unverified).
+- [x] **Nemotron tool calling on build.nvidia.com:** pick the model, test a 3-tool loop, and check the rate limit (reported ~40 requests/min, unverified).
 - [x] **Free price feed:** try [GetDeploying](https://getdeploying.com/gpu-price-trends) (weekly history, 103 GPUs), the Silicon Data public page and Ornn. If none works, keep the seeded curve.
 - [ ] **Optimizer:** greedy vs. OR-Tools (Nandhan decides; greedy is faster).
 - [ ] **Ask the NMC² booth:** what maintenance actually costs them, and how they schedule it now. Their answer can make a pitch line.
 
 ## Honesty (disclose in the demo)
 - The facility, telemetry, backlog, utilization and risk numbers are simulated or assumed (see Assumptions).
-- Prices: real weekly history from GetDeploying (H100 on-demand median across providers, $4.02/hr as of 2026-11-02, in `backend/data/gpu-prices/`). The daily forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
+- Prices: real weekly history from GetDeploying (H100 on-demand, 46 providers: median of 128 offerings $4.02/hr, per-provider median $3.96, as of 2026-11-02; in `backend/data/gpu-prices/`). The daily forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
 - Don't claim NMC² uses this market, or that CME compute futures are trading.
 - Nemotron rehearsed requests: for the 3 scripted demo requests the parsed task is pinned to a pre-verified version (and used outright if Nemotron is offline/rate-limited). Unscripted requests use Nemotron's parse as-is.
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - With real prices the price rises steadily through the week (~0.5%/day), so price timing alone saves ~1%.
 - The optimized plan is checked against our own thermal sim (simulate.py), whose temperatures and cooling rules are assumed. "Never overheats" means never in that sim.
+
+## Pitch (full script, 30-second version and Q&A in `PITCH.md`)
+- **One-liner:** We schedule GPU data-center maintenance at the lowest compute-market cost, without letting the hall overheat; Nemotron turns a plain-English work request into a safe, priced plan.
+- **Roles (proposed):** Driver Nandhan · Narrator Loki · Tech answers Loki + Nandhan · Backup Fawaz (video, hotspot, timer)
+- **Lead with "0 overheats vs 5"**, not the 42.8%.
 
 ## Open (still undecided)
 - Product name, track 3, pitch roles, whether to use Higgsfield.
@@ -164,5 +169,8 @@ Sleep in shifts; someone is always building.
 - 22:xx Nandhan: thermal-aware optimizer. Every slot the optimizer takes is checked with `simulate_plan` on the whole plan; cheapest slot that keeps all zones under 32 C wins. ASAP stays unchecked (the baseline). Shortcut: non-cooling tasks only lower temps, so they skip per-slot sims; ~17 ms per plan. Seeded week unchanged: optimized $12,772.56 clean vs ASAP $13,248.58 with 5 overheats; fallback-plans.js still valid. 48 tests.
 - 23:xx Nandhan: real prices. Fawaz's GetDeploying CSVs (H100/H200/B200, weekly Nov 2025-Nov 2026) in backend/data/gpu-prices; app/market.py turns them into a daily forecast for the week of Mon Nov 9 (H100 $4.16 -> $4.28, rising ~0.5%/day). stubs.price() now uses it (Loki: cost model untouched). Seeded week: optimized $17,449 clean vs ASAP $18,101 (5 overheats); saved $652 (3.6%). Real week-to-week moves average 2.7%, so within one week price barely changes the schedule: savings still come from utilization + timing. fallback-plans.js regenerated via backend/scripts/make_fallback.py.
 - 23:xx Nandhan: merged loki/polish into nandhan/thermal-planner (main untouched). Loki's cost model (prices.py, fixed risk term) now reads the real GetDeploying forecast instead of the invented curve (team call: real data). Real prices alone save ~1%, so ASAP's overheats are now priced (Plan.overheat_cost / Plan.overheats, optional fields): seeded week cloud optimized $18,222.79 clean vs ASAP $31,867.40 incl. $13,467.77 for 5 overheat zone-hours -> saved $13,644.61 (42.8%), ~99% of it overheats at the ASSUMED outage rate. Agent tests updated for the heat-aware planner (re-plan path tested with a planner blind to the new task's heat). Ask Nemotron panel wired into main.js; summary shows overheats 0 vs 5. 74 tests.
+- 22:15 Loki reviewed + merged PR #3 (includes PR #2) into main. Verified: 74 tests, live server ASAP $31,867.40 (5 overheats) vs optimized $18,222.79 (0), live Nemotron request clean. Pitch note: ~99% of the 42.8% is overheats priced at the ASSUMED outage rate (two of five zone-hours only 32.3/32.7 C); lead with "0 overheats vs 5". Open: confirm GetDeploying data reuse terms before repo goes public.
+- 22:25 Pitch written (PITCH.md): 3-min script, 30-s version, 10 Q&A answers. DEMO_SCRIPT rehearsed requests fixed to match demo_requests.py. Found: weekend PDU request's $ saving is not like-for-like (ASAP can't schedule weekend jobs); don't quote it.
+- 22:35 GetDeploying data license confirmed on https://getdeploying.com/dataset/gpu-prices: CC BY 4.0, attribution "GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0" added to README, DEVPOST, data README. Clarified two medians (offering median $4.02 used by market.py vs per-provider median $3.96). (Done by Nandhan: credit line under the price chart.)
 - 23:xx Nandhan: 3D hall (frontend/scene.js, Three.js r160): floating-island campus in pixel art (low-res render + depth outlines + dithered palette), cut-away hall whose near walls drop as the camera turns, 40 racks (LEDs online / amber + beacon + tech in maintenance / red when their zone overheats), CRAC/PDU/CDU/UPS/fiber equipment with beacons, day-night lighting from the week clock, embers + red zone glow on ASAP overheats. Drag to orbit, wheel zoom, Q/E turn, click a rack. Deep link ?turn=N. 2D placeholder stays as the fallback.
 - 23:xx Nandhan: UI redesign (frontend-design skill). Scoreboard moved off the island into a left-column ledger (our plan vs ASAP: $, GPUs down now, overheats so far; big Saved so far). Facilities-sheet look: vellum ground, slate ink, chilled-water teal = ours, safety orange = ASAP/overheats, safety yellow = work; Barlow / Barlow Condensed only, sentence case; no caps labels, middle dots or mono. CC BY 4.0 credit for GetDeploying under the price chart. Live Nemotron check with the key in backend/.env: rehearsed UPS-B request in 26 s (LLM called lookup_equipment, day_windows, add_task, make_plan, simulate), Wed 02:00, no violations.

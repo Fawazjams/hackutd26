@@ -1,13 +1,13 @@
 # Demo script
 
-> Every `$[X]` is a placeholder. Fill it from the live tool output on the final build and **never round up or invent**. Run the demo twice before recording: the numbers must match both times (seed 42).
+> Full live pitch + Q&A: see `PITCH.md`. Every `$[X]` is a placeholder. Fill it from the live tool output on the final build and **never round up or invent**. Run the demo twice before recording: the numbers must match both times (seed 42).
 
 ## Setup checklist
 - [ ] `cd backend && uvicorn app.main:app --port 8000` running; `/docs` loads
 - [ ] Frontend open, mode = **GPU cloud**
 - [ ] `NVIDIA_API_KEY` in `backend/.env`; one warm-up `/request` sent (avoid a cold first call on camera)
 - [ ] Fallback plans loaded in the UI (works even if the backend dies)
-- [ ] Verify the overheat beat below still appears with the **final** ASAP baseline (it was confirmed on the stub "earliest hour" plan)
+- [x] Overheat beat confirmed on the final ASAP baseline: Z2/Z3 over 32 C Mon 10:00-12:00 (5 zone-hours)
 
 ---
 
@@ -19,7 +19,7 @@
 | 0:15–0:30 | Backlog panel + price forecast | "This is one week's backlog: CRAC compressor, PDU breakers, firmware, UPS test, fiber, coolant flush. Here's the H100 price forecast, built from real GetDeploying market prices." |
 | 0:30–0:50 | Click **ASAP plan**, play week | "The usual way is to do it all ASAP. Watch Monday morning: the CRAC-2 replacement and the CDU-3 flush overlap in neighboring zones, both lose their backup cooling, and zones Z2 and Z3 **overheat**. The ASAP plan also costs **$[X]**." |
 | 0:50–1:15 | Click **Plan** (optimized), play week, $ counters side by side | "Our optimizer prices every hour of downtime in market dollars, factors in failure risk that grows while a task waits, and keeps cooling zones apart. Same backlog, **$[Y]**, so **$[X−Y] saved** this week with no overheating." |
-| 1:15–1:45 | Type request 1 into the agent box | "Now a new job comes in." *(type the UPS-B request)* "Nemotron turns it into a task and calls our tools: forecast, optimizer, simulator, and it re-plans if anything overheats. Every number it says comes from our code, not the model." |
+| 1:15–1:45 | Type request 1 into the agent box | "Now a new job comes in." *(type the UPS-B request)* "Nemotron turns it into a task and calls our tools: equipment lookup, day windows, optimizer, then the simulator to check the result. The heat-aware optimizer already keeps it clean; if the sim ever flags a problem, the agent re-plans around it. Every number it says comes from our code, not the model." |
 | 1:45–2:00 | Tool-call trace + explanation | "It fits the swap into the vendor's window at **$[Z]**. Simulated hall, assumed numbers, real market logic. That's [product name]." |
 
 ---
@@ -37,13 +37,13 @@
 
 ## Nemotron requests
 
-**Rehearsed (run each at least 3 times before the demo; results must match):**
-1. *"UPS-B battery swap, 3 hrs, vendor only Wed or Fri."* Expect: new task in Z4, window Wed (hours 48–72) or Fri (96–120), placed to avoid T4/T5 in Z4.
-2. *"CRAC-4 needs a fan motor replaced, about 5 hours, any day this week."* Expect: a cooling task in Z4. The agent must not overlap it with CDU-3 (T6, neighbor zone Z3), or the simulator reports overheat → re-plan.
-3. *"Push a GPU firmware update to racks 20 to 23, 2 hours, only after 6 PM."* Expect: Z3 task with evening windows, kept apart from the CDU-3 flush.
+**Rehearsed (must match `backend/app/demo_requests.py`; run each 3 times, results must match):**
+1. *"UPS-B battery swap, 3 hrs, vendor only Wed or Fri"*: Z4, Wed 02:00-05:00, no violations.
+2. *"CRAC-4 filter and belt service, 4 hours, weekdays 8am to 6pm"*: Z4 cooling job, Mon 09:00-13:00, no violations.
+3. *"PDU row C breaker inspection, 2 hours, weekend only"*: Z3, Sat 06:00-08:00. **Don't quote its $ saving**: ASAP (business hours only) can't schedule a weekend job, so the comparison isn't like for like.
 
 **Unscripted (hand to a judge), suggest:**
-- *"We need to swap the PDU breakers in row D sometime before Thursday, takes 4 hours."*
+- *"Swap the fan tray on CRAC-1, about 2 hours, any weekday afternoon"* (tested live, clean).
 
 ## If it breaks, say this
 - **Agent/API fails:** "Nemotron's rate-limited right now. Here's the same request from our rehearsal." Then show the saved run. "The plan and the numbers come from our optimizer either way; the model only parses and explains."

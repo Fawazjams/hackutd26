@@ -59,9 +59,12 @@ An operations lead opens the week's maintenance backlog: CRAC compressor replace
 - Escalation calls and texts to the on-call technician.
 - Fine-tune Nemotron on maintenance tickets.
 
+## Data credit
+Price data: GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0. Dataset: https://getdeploying.com/dataset/gpu-prices
+
 ## Honesty / disclosures
 - The facility, telemetry, backlog, utilization and risk numbers are **simulated or assumed**. Every assumed value is labeled in `backend/app/config.py`.
-- Prices: the **history is real** (GetDeploying weekly H100 on-demand median across ~46 providers, $4.02/GPU-hr on 2026-11-02, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
+- Prices: the **history is real** (GetDeploying weekly H100 on-demand prices from 46 providers: median of 128 offerings $4.02/GPU-hr on 2026-11-02, per-provider median $3.96, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - We do not claim NMC² uses this market, or that CME compute futures are trading.
 
