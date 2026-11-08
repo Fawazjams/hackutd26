@@ -1359,19 +1359,20 @@ function createProviders(scene) {
   const SLOTS = [new THREE.Vector3(-56, -3, 56), new THREE.Vector3(56, -3, -56), new THREE.Vector3(0, -6, -80)];
   const HOME = new THREE.Vector3(0, 14, 0);
   const islands = new Map();          // id -> {group, base, born, dying, beaconMat, light, state}
+  const BEACON_HI = new THREE.Color(0xffe08a);
 
   function label(text) {
     const cv = document.createElement('canvas');
     cv.width = 256; cv.height = 64;
     const c = cv.getContext('2d');
-    c.fillStyle = 'rgba(23,35,43,0.92)'; c.fillRect(0, 0, 256, 64);
+    c.fillStyle = '#17232b'; c.fillRect(0, 0, 256, 64);   // opaque: a see-through tag showed the roof trim through it
     c.fillStyle = '#76b900'; c.fillRect(0, 58, 256, 6);
     c.fillStyle = '#f6f8f8'; c.font = 'bold 30px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(text, 128, 30);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-    s.scale.set(16, 4, 1);
+    s.scale.set(14, 3.5, 1);
     s.renderOrder = 10;
     return s;
   }
@@ -1446,7 +1447,7 @@ function createProviders(scene) {
 
     // hall: raised tiled floor, cold aisles, hot aisle with containment glass
     const Y = 0.62, HX = 22, HZ = 14;
-    box(HX + 0.4, 0.5, HZ + 0.4, mat(C.concreteDark), 0, 0.37, 0, g);
+    box(HX + 0.4, 0.5, HZ + 0.4, mat(C.concreteDark), 0, 0.34, 0, g);   // top at 0.59, just under the floor (coplanar = z-fighting)
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(HX, HZ), new THREE.MeshLambertMaterial({ map: tileTex }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = Y; floor.receiveShadow = true; g.add(floor);
     for (const z of [-3.6, 3.6]) {
@@ -1518,22 +1519,28 @@ function createProviders(scene) {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshLambertMaterial({ map: st, emissive: 0xffffff, emissiveMap: st, emissiveIntensity: 0.25 }));
     sign.position.set(-3, Y + 2.6, -HZ / 2 + 0.32);
     g.add(sign);
-    const strip = new THREE.MeshLambertMaterial({ color: 0xfffbe8, emissive: 0xfff1c4, emissiveIntensity: 0.6 });
-    for (const z of [-3.6, 0, 3.6]) box(14, 0.1, 0.3, strip, -1, Y + RH + 1.6, z, g).castShadow = false;
+    // (no ceiling light strips: always-lit white bars read as floating glitches in the cut-away view)
 
-    // status mast + beacon (talking / deal / no deal)
-    box(0.25, 6, 0.25, mat(C.steelDark), HX / 2 - 1, 3.6, HZ / 2 - 1, g);
+    // status mast + beacon (talking / deal / no deal) on the apron outside the hall's front-right corner,
+    // so the mast reads as a mast instead of a ball floating over the racks
+    const MX = HX / 2 + 1.4, MZ = HZ / 2 + 1.0;
+    box(0.9, 0.3, 0.9, mat(C.concreteDark), MX, 0.4, MZ, g);
+    box(0.35, 6, 0.35, mat(C.steelDark), MX, 3.5, MZ, g);
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 10), beaconMat);
-    beacon.position.set(HX / 2 - 1, 7.1, HZ / 2 - 1);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 10), beaconMat);
+    beacon.position.set(MX, 7.0, MZ);
     g.add(beacon);
     const light = new THREE.PointLight(0xffc14d, 0, 30, 1.6);
     light.position.set(0, 8, 0);
     g.add(light);
     const tag = label(name);
-    tag.position.set(0, 13, 0);
+    tag.position.set(0, 20, 0);                    // above the drone's hover point, clear of the building
     g.add(tag);
-    g.traverse(o => { o.raycast = () => {}; });   // never picked as a rack
+    g.traverse(o => {
+      o.raycast = () => {};                        // never picked as a rack
+      // these islands sit outside the sun's shadow box (±48): partial coverage drew hard shadow cut-off lines
+      o.castShadow = false; o.receiveShadow = false;
+    });
     return { group: g, beaconMat, light, racks, fans, state: 'idle' };
   }
 
@@ -1616,7 +1623,7 @@ function createProviders(scene) {
 
   function hover(id) {
     const isl = islands.get(id);
-    return isl ? isl.base.clone().add(new THREE.Vector3(0, 17, 0)) : HOME.clone();
+    return isl ? isl.base.clone().add(new THREE.Vector3(0, 13, 0)) : HOME.clone();   // under the name tag (y 20)
   }
 
   return {
@@ -1671,10 +1678,11 @@ function createProviders(scene) {
         e.group.position.set(e.base.x, e.base.y + dy + Math.sin(t * 0.8 + e.base.x) * 0.4, e.base.z);
         for (const r of e.racks) r.ledMat.emissiveIntensity = 0.75 + 0.45 * Math.sin(t * r.speed + r.phase) ** 8;
         for (const f of e.fans) f.rotation.y += dt * 9;
-        const pulse = 0.5 + 0.5 * Math.sin(t * 7);
-        if (e.state === 'talking') { e.beaconMat.color.setHex(pulse > 0.5 ? 0xffc14d : 0xf2a33a); e.light.color.setHex(0xffc14d); e.light.intensity = 40 + 60 * pulse; }
-        else if (e.state === 'deal') { e.beaconMat.color.setHex(0x76b900); e.light.color.setHex(0x76b900); e.light.intensity = 90; }
-        else if (e.state === 'no_deal') { e.beaconMat.color.setHex(0xff3b2e); e.light.color.setHex(0xff3b2e); e.light.intensity = 70; }
+        // Beacon blinks; the island's light stays steady (a 40-100 strobe at ~1 Hz flashed the whole hall amber).
+        const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+        if (e.state === 'talking') { e.beaconMat.color.setHex(0xf2a33a).lerp(BEACON_HI, pulse); e.light.color.setHex(0xffc14d); e.light.intensity = 14; }
+        else if (e.state === 'deal') { e.beaconMat.color.setHex(0x76b900); e.light.color.setHex(0x76b900); e.light.intensity = 18; }
+        else if (e.state === 'no_deal') { e.beaconMat.color.setHex(0xff3b2e); e.light.color.setHex(0xff3b2e); e.light.intensity = 14; }
         else { e.beaconMat.color.setHex(0x333333); e.light.intensity = 0; }
       }
       if (flight) {
