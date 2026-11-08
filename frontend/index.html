@@ -79,6 +79,27 @@
     </section>
   </header>
 
+  <!-- Top of the stage: transport bar (play, clock, speed) + week scrubber -->
+  <section class="transport sec-time" aria-label="Time controls">
+    <div class="tp-row">
+      <button class="tp-play" id="btn-play" aria-pressed="true" title="Play / pause (Space)"><span id="play-ico">❚❚</span> <span id="play-txt">Pause</span></button>
+      <span class="tp-clock sec-aside" id="time-aside">Mon 00:00</span>
+      <div class="seg tp-speed" role="radiogroup" aria-label="Speed" id="seg-speed">
+        <button role="radio" data-value="1" aria-checked="true">1×</button>
+        <button role="radio" data-value="4" aria-checked="false">4×</button>
+        <button role="radio" data-value="16" aria-checked="false">16×</button>
+      </div>
+      <button class="tp-restart" id="btn-restart" title="Replay the week (R)" aria-label="Replay the week">↺</button>
+      <span class="tp-legend"><span><i class="sw sw-ours"></i>Our plan</span><span><i class="sw sw-asap"></i>ASAP</span></span>
+      <button class="tp-report" id="btn-report" type="button">Open week report</button>
+    </div>
+    <div class="tp-track">
+      <div class="gantt" id="gantt"></div>
+      <input type="range" class="slider" id="scrub" min="0" max="168" step="0.25" value="0" aria-label="Hour of week" />
+      <label class="explain-row"><input type="checkbox" id="chk-explain" checked /> Explain key moments as the week plays</label>
+    </div>
+  </section>
+
   <!-- Bottom-center: event ticker -->
   <section class="ticker" aria-live="polite" aria-label="Event log">
     <ol id="ticker-list"></ol>
@@ -129,85 +150,81 @@
   <!-- Right: control panel -->
   <button class="panel-toggle" id="panel-toggle" aria-controls="panel" aria-expanded="false">Controls</button>
   <aside class="panel" id="panel" aria-label="Planner controls">
-    <section class="sec">
-      <div class="sec-label">
-        <span>Mode</span>
-        <span class="info" tabindex="0" aria-describedby="mode-tip">i
-          <span class="tip" role="tooltip" id="mode-tip">
-            <b>GPU cloud</b> — downtime costs the revenue you would have billed, plus SLA credits owed on contracted hours you miss.<br /><br />
-            <b>Private DC</b> — downtime costs what it would take to rent the same GPUs elsewhere. No SLA term.
+    <div class="tabs" role="tablist" aria-label="Panel">
+      <button role="tab" id="tab-plan" data-tab="plan" aria-controls="tp-plan" aria-selected="true">Plan</button>
+      <button role="tab" id="tab-prices" data-tab="prices" aria-controls="tp-prices" aria-selected="false" tabindex="-1">Prices</button>
+      <button role="tab" id="tab-agent" data-tab="agent" aria-controls="tp-agent" aria-selected="false" tabindex="-1">Agent</button>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tp-plan" aria-labelledby="tab-plan">
+    <section class="sec sec-top">
+      <div class="ctl-row">
+        <span class="ctl-label">Mode
+          <span class="info" tabindex="0" aria-describedby="mode-tip">i
+            <span class="tip" role="tooltip" id="mode-tip">
+              <b>GPU cloud</b>: downtime costs the revenue you would have billed, plus SLA credits owed on contracted hours you miss.<br /><br />
+              <b>Private DC</b>: downtime costs what it would take to rent the same GPUs elsewhere. No SLA term.
+            </span>
           </span>
         </span>
+        <div class="seg seg-2" role="radiogroup" aria-label="Mode" id="seg-mode">
+          <button role="radio" data-value="cloud" aria-checked="true">GPU cloud</button>
+          <button role="radio" data-value="private" aria-checked="false">Private DC</button>
+        </div>
       </div>
-      <div class="seg seg-2" role="radiogroup" aria-label="Mode" id="seg-mode">
-        <button role="radio" data-value="cloud" aria-checked="true">GPU cloud</button>
-        <button role="radio" data-value="private" aria-checked="false">Private DC</button>
+      <div class="ctl-row">
+        <span class="ctl-label">In the hall</span>
+        <div class="seg seg-2" role="radiogroup" aria-label="Plan shown in the hall" id="seg-show">
+          <button role="radio" data-value="optimized" aria-checked="true"><i class="sw sw-ours"></i>Our plan</button>
+          <button role="radio" data-value="asap" aria-checked="false"><i class="sw sw-asap"></i>ASAP</button>
+        </div>
       </div>
     </section>
-
-    <section class="sec">
-      <div class="sec-label"><span>Show in the hall</span></div>
-      <div class="seg seg-2" role="radiogroup" aria-label="Plan shown in the hall" id="seg-show">
-        <button role="radio" data-value="optimized" aria-checked="true"><i class="sw sw-ours"></i>Our plan</button>
-        <button role="radio" data-value="asap" aria-checked="false"><i class="sw sw-asap"></i>ASAP</button>
-      </div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-label"><span>This week’s jobs</span><span class="sec-aside">start times, cost</span></div>
+    <section class="sec sec-jobs">
+      <div class="sec-label"><span>This week’s jobs</span><span class="sec-aside">start, cost</span></div>
       <ol class="ladder" id="ladder"></ol>
       <div class="ladder-note" id="ladder-note"></div>
     </section>
-
-    <section class="sec">
-      <div class="sec-label"><span>H100 rental price</span><span class="sec-aside">$ per GPU-hour</span></div>
-      <div class="price-chart" id="price-chart"></div>
-      <div class="caption">Daily forecast is our model, built on real weekly H100 prices through Nov 2. Not a live feed.</div>
-      <div class="caption credit">Data: <a href="https://getdeploying.com/gpus" target="_blank" rel="noopener">GetDeploying</a>, GPU rental price history, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Changed: daily trend forecast added.</div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-label"><span>Time</span><span class="sec-aside" id="time-aside">Mon 00:00</span></div>
-      <div class="seg seg-time">
-        <button id="btn-play" aria-pressed="true" title="Play / pause (Space)"><span id="play-ico">❚❚</span> <span id="play-txt">Pause</span></button>
-        <div class="seg-contents" role="radiogroup" aria-label="Speed" id="seg-speed">
-          <button role="radio" data-value="1" aria-checked="true">1×</button>
-          <button role="radio" data-value="4" aria-checked="false">4×</button>
-          <button role="radio" data-value="16" aria-checked="false">16×</button>
+    <details class="sec sec-view" id="view-settings">
+      <summary><span>View settings</span><span class="plus" aria-hidden="true"></span></summary>
+      <div class="view-body">
+        <div class="seg seg-2">
+          <button id="btn-left">⟲ Turn left</button>
+          <button id="btn-right">Turn right ⟳</button>
         </div>
-        <button id="btn-restart" title="Replay the week (R)" aria-label="Replay the week">↺</button>
+        <div class="seg seg-2" role="radiogroup" aria-label="Render style" id="seg-render">
+          <button role="radio" data-value="raw" aria-checked="true">Crisp 3D</button>
+          <button role="radio" data-value="pixel" aria-checked="false">Pixel art</button>
+        </div>
+        <label class="slider-row">
+          <span>Pixel size</span>
+          <input type="range" class="slider" id="pixel-size" min="1" max="6" step="1" value="3" />
+          <output id="pixel-size-out">3</output>
+        </label>
+        <div class="checks">
+          <label><input type="checkbox" id="chk-outlines" checked /> Outlines</label>
+          <label><input type="checkbox" id="chk-palette" /> Palette</label>
+        </div>
       </div>
-      <div class="gantt" id="gantt"></div>
-      <input type="range" class="slider" id="scrub" min="0" max="168" step="0.25" value="0" aria-label="Hour of week" />
-      <label class="explain-row"><input type="checkbox" id="chk-explain" checked /> Explain key moments as the week plays</label>
+    </details>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tp-prices" aria-labelledby="tab-prices">
+    <section class="sec sec-price">
+      <div id="price-insights"></div>
+      <div class="caption credit" id="price-credit">Real weekly prices through Nov 2, daily forecast is our model. Data: <a href="https://getdeploying.com/gpus" target="_blank" rel="noopener">GetDeploying</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, forecast added.</div>
     </section>
-
-    <section class="sec">
-      <div class="sec-label"><span>View</span></div>
-      <div class="seg seg-2">
-        <button id="btn-left">⟲ Turn left</button>
-        <button id="btn-right">Turn right ⟳</button>
-      </div>
-      <div class="seg seg-2" role="radiogroup" aria-label="Render style" id="seg-render">
-        <button role="radio" data-value="raw" aria-checked="true">Crisp 3D</button>
-        <button role="radio" data-value="pixel" aria-checked="false">Pixel art</button>
-      </div>
-      <label class="slider-row">
-        <span>Pixel size</span>
-        <input type="range" class="slider" id="pixel-size" min="1" max="6" step="1" value="3" />
-        <output id="pixel-size-out">3</output>
-      </label>
-      <div class="checks">
-        <label><input type="checkbox" id="chk-outlines" checked /> Outlines</label>
-        <label><input type="checkbox" id="chk-palette" /> Palette</label>
-      </div>
-    </section>
-
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tp-agent" aria-labelledby="tab-agent">
     <section class="sec sec-ask">
       <div class="sec-label"><span>Ask Nemotron</span><span class="pill pill-phase">Phase 2</span></div>
       <input class="ask" type="text" disabled placeholder="“UPS-B battery swap, 3 hrs, vendor only Wed or Fri”" aria-label="Ask Nemotron (not connected yet)" />
-      <div class="caption">Phase 2 — not connected yet.</div>
+      <div class="caption">Phase 2, not connected yet.</div>
     </section>
+    </div>
+
+
+
+
+
   </aside>
 
   <!-- Bottom-right: how it's priced -->

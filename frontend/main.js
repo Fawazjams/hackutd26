@@ -63,6 +63,35 @@ const rackCache = new Map();
 const equipCache = new Map();
 const zoneAlertCache = new Map();
 let priceChart = null, gantt = null;
+let priceInsights = null;   // ui/price-insights.js when it loads; else the basic createPriceChart
+
+// Load the price-insights module once; any failure falls back to the basic bar chart.
+let priceInsightsLoad = null;
+function loadPriceInsights() {
+  priceInsightsLoad ||= import('./ui/price-insights.js')
+    .then((m) => {
+      const pi = m.initPriceInsights($('price-insights'), { getPlans: () => S.d?.plans, getMode: () => S.mode });
+      if (!pi) throw new Error('initPriceInsights returned nothing');
+      priceInsights = pi;
+      $('price-credit').hidden = true;   // the module carries its own data credit
+    })
+    .catch((e) => { console.warn('[price-insights] using the basic price chart:', e); priceInsights = null; });
+  return priceInsightsLoad;
+}
+
+function renderPrices(raw) {
+  if (priceInsights) {
+    try {
+      priceInsights.refresh?.();
+      if (BOOT.day != null) { const d = BOOT.day; BOOT.day = null; setTimeout(() => { try { priceInsights?.openDay?.(d); } catch (e) { console.warn('[price-insights] openDay failed:', e); } }, 0); }
+      return;
+    } catch (e) { console.warn('[price-insights] refresh failed, using the basic price chart:', e); priceInsights = null; }
+  }
+  const host = $('price-insights');
+  host.classList.add('price-chart');
+  $('price-credit').hidden = false;
+  priceChart = createPriceChart(host, raw.prices);
+}
 const firedIncidents = new Set();   // each alarm fires by itself once per page load
 const sessionTasks = new Map();     // jobs Nemotron added this session: id -> { task, source }
 
@@ -204,8 +233,9 @@ function applyRaw(raw, at = null) {
   S.beatLog = []; S.hold = 0; hideBeat();
   $('offline-chip').hidden = !raw.offline;
   buildLadder();
-  priceChart = createPriceChart($('price-chart'), raw.prices);
+  renderPrices(raw);
   gantt = createGantt($('gantt'), S.d.plans, raw.backlog.map(t => t.id));
+  ganttW = $('gantt').clientWidth;
   gantt.select(S.selected);
   if (at == null) restart();
   else {
@@ -1166,7 +1196,11 @@ function render(now) {
   updateTicker();
   updateLadder();
   updateNewJob();
-  priceChart?.setToday(Math.min(6, Math.floor(S.t / 24)));
+  const today = Math.min(6, Math.floor(S.t / 24));
+  if (priceInsights) {
+    try { priceInsights.setToday(today); }
+    catch (e) { console.warn('[price-insights] setToday failed, using the basic price chart:', e); priceInsights = null; if (S.raw) renderPrices(S.raw); }
+  } else priceChart?.setToday(today);
   gantt?.setHour(S.t);
   const scrub = $('scrub');
   if (document.activeElement !== scrub || !S.playing) scrub.value = S.t.toFixed(2);
@@ -1178,7 +1212,77 @@ function render(now) {
 // ---------------------------------------------------------------- boot
 // Optional deep-link for rehearsals and screenshots: ?mode=private&show=asap&t=36&speed=4&paused=1
 const Q = new URLSearchParams(location.search);
-const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
+const BOOT = {
+  t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1',
+  day: /^[0-6]$/.test(Q.get('day') || '') ? Number(Q.get('day')) : null,   // ?day=N opens that day's price detail
+};
+
+// ---------------------------------------------------------------- panel tabs, report, timeline resize
+const TAB_KEY = 'dtp.tab';
+function setTab(name, { save = true, focus = false } = {}) {
+  const tabs = document.querySelectorAll('.tabs [role="tab"]');
+  if (![...tabs].some(t => t.dataset.tab === name)) name = 'plan';
+  for (const t of tabs) {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    const panel = $(t.getAttribute('aria-controls'));
+    if (panel) { panel.classList.toggle('off', !on); panel.setAttribute('aria-hidden', String(!on)); }
+    if (on && focus) t.focus();
+  }
+  if (save) { try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* storage blocked */ } }
+  try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
+}
+function wireTabs() {
+  const list = document.querySelector('.tabs');
+  if (!list) return;
+  const tabs = [...list.querySelectorAll('[role="tab"]')];
+  list.addEventListener('click', (e) => { const t = e.target.closest('[role="tab"]'); if (t) setTab(t.dataset.tab); });
+  list.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    let j = null;
+    if (e.key === 'ArrowRight') j = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = tabs.length - 1;
+    if (j == null) return;
+    e.preventDefault(); e.stopPropagation();
+    setTab(tabs[j].dataset.tab, { focus: true });
+  });
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_KEY); } catch (e) { saved = null; }
+  setTab(BOOT.day != null ? 'prices' : (saved || 'plan'), { save: BOOT.day != null });
+  // a Nemotron run or an alarm: show its work in the Agent tab
+  window.addEventListener('agent:step', () => { if (document.querySelector('.tabs [aria-selected="true"]')?.dataset.tab !== 'agent') setTab('agent', { save: false }); });
+  document.addEventListener('click', (e) => { if (e.target.closest?.('.ap-alarm-btn, .ap-btn, .ap-chip')) setTab('agent', { save: false }); }, true);
+  $('panel').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList?.contains('ask')) setTab('agent', { save: false }); }, true);
+}
+function wireReport() {
+  const b = $('btn-report');
+  if (!b) return;
+  b.addEventListener('click', () => {
+    try {
+      if (!S.d || !S.raw) return;
+      import('./ui/report.js')
+        .then(m => m.openReport({ plans: S.d.plans, backlog: S.raw.backlog, prices: S.raw.prices, mode: S.mode }))
+        .catch(e => console.warn('[report] not available yet:', e));
+    } catch (e) { console.warn('[report] failed:', e); }
+  });
+}
+let ganttW = 0, ganttTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(ganttTimer);
+  ganttTimer = setTimeout(() => {
+    const host = $('gantt');
+    if (!host || !S.d || !S.raw || host.clientWidth === ganttW) return;
+    ganttW = host.clientWidth;
+    try {
+      gantt = createGantt(host, S.d.plans, S.raw.backlog.map(t => t.id));
+      gantt.select(S.selected); gantt.setHour(S.t);
+    } catch (e) { console.warn('[gantt] resize failed:', e); }
+  }, 120);
+});
 
 (function boot() {
   (window.__pendingErrors || []).forEach(m => window.__showDevError?.(m));
@@ -1186,12 +1290,15 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   if (Q.get('show') === 'asap') setShow('asap');
   if (['1', '4', '16'].includes(Q.get('speed'))) { S.speed = Number(Q.get('speed')); setSeg('seg-speed', Q.get('speed')); }
   wireControls();
+  wireTabs();
+  wireReport();
   pushView();
   // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)
   initHall().then(() => { for (let i = 0; i < (Number(Q.get('turn')) || 0) % 4; i++) call('rotate', +1); });
   initAgentPanel();
   window.addEventListener('agent:step', onAgentStep);
   window.addEventListener('agent:plan', onAgentPlan);
-  loadMode(S.mode);
+  // price insights first (a local module, quick) so the first load renders into it
+  loadPriceInsights().finally(() => loadMode(S.mode));
   requestAnimationFrame(frame);
 })();
