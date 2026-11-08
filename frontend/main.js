@@ -27,13 +27,14 @@ const S = {
   selected: null,          // selected backlog task id
   flash: null,             // { racks:Set, start }
   summaryDismissed: false,
-  view: { pixelArt: true, pixelSize: 3, outlines: true, palette: true },
+  view: { pixelArt: false, pixelSize: 3, outlines: true, palette: false },
   loadToken: 0,
 };
 
 let dc = null;             // hall API: 3D scene or 2D placeholder
 const rackCache = new Map();
 const equipCache = new Map();
+const zoneAlertCache = new Map();
 let priceChart = null, gantt = null;
 
 // ---------------------------------------------------------------- hall wiring
@@ -65,7 +66,7 @@ async function initHall() {
     dc = createPlaceholderHall(stage);
   }
   $('stage-loading')?.remove();
-  rackCache.clear(); equipCache.clear();
+  rackCache.clear(); equipCache.clear(); zoneAlertCache.clear();
   call('onRackClick', onRackClick);
   call('setView', { ...S.view });
   call('setPaused', !S.playing);
@@ -99,7 +100,7 @@ function prepare(raw) {
     });
     plans[key] = { ...p, items, overheats: p.overheats || [], byTask: new Map(items.map(i => [i.task_id, i])) };
   }
-  const events = [{ h: 0, plan: null, kind: 'week', text: `Week starts · ${raw.backlog.length} jobs in the backlog` }];
+  const events = [{ h: 0, plan: null, kind: 'week', text: `Week starts with ${raw.backlog.length} jobs to fit in` }];
   for (const key of ['optimized', 'asap']) {
     for (const it of plans[key].items) {
       events.push({ h: it.start_hour, plan: key, kind: 'start', it });
@@ -150,7 +151,7 @@ async function loadMode(mode) {
   const token = ++S.loadToken;
   document.body.classList.toggle('mode-cloud', mode === 'cloud');
   document.body.classList.toggle('mode-private', mode === 'private');
-  $('sb-mode').textContent = mode === 'cloud' ? 'GPU cloud · revenue + SLA' : 'Private DC · rental cost';
+  $('sb-mode').textContent = mode === 'cloud' ? 'GPU cloud: lost revenue and SLA credits' : 'Private hall: cost to rent replacements';
   const raw = await loadAll(mode);
   if (token !== S.loadToken) return;
   applyRaw(raw);
@@ -207,21 +208,21 @@ function buildLadder() {
     li.style.setProperty('--zc', ZONE_VAR[task.zone] || 'var(--ink-3)');
     const same = o && a && o.start_hour === a.start_hour;
     const when = same
-      ? `<span class="eq">${esc(o.start_label)} · same</span>`
+      ? `<span class="eq">${esc(o.start_label)}, same in both</span>`
       : `<span class="o" title="Our plan start">■ ${o ? esc(o.start_label) : '—'}</span><span class="a" title="ASAP start">■ ${a ? esc(a.start_label) : '—'}</span>`;
     const cost = o
       ? `${a && Math.round(a.total) !== Math.round(o.total) ? `<s title="ASAP cost">${money(a.total)}</s>` : ''}${money(o.total)}`
       : '—';
     li.innerHTML = `
       <span class="bar"></span>
-      <span class="l1"><span class="nm" title="${esc(task.name)} · ${esc(task.equipment)} · ${task.duration_hrs} h · ${task.racks_affected.length} racks">${esc(shortName(task.name))}</span><i class="zone">${esc(task.zone)}</i><span class="pill" data-pill>queued</span></span>
+      <span class="l1"><span class="nm" title="${esc(task.name)}: ${esc(task.equipment)}, ${task.duration_hrs} h, ${task.racks_affected.length} racks">${esc(shortName(task.name))}</span><i class="zone">${esc(task.zone)}</i><span class="pill" data-pill>queued</span></span>
       <span class="l2"><span class="when">${when}</span><span class="cost">${cost}</span></span>`;
     li.addEventListener('click', () => selectTask(task.id));
     li.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); selectTask(task.id); } });
     ol.appendChild(li);
   }
   const notes = ['optimized', 'asap'].flatMap(k => plans[k].unscheduled.map(u => `${PLAN_LABEL[k]}: ${u.task_id} not scheduled — ${u.reason}`));
-  $('ladder-note').textContent = notes.join(' · ');
+  $('ladder-note').textContent = notes.join('. ');
   lastPills = '';
 }
 
@@ -284,6 +285,14 @@ function applyHall(now) {
     const st = busyEq.has(eq) ? 'maintenance' : 'normal';
     if (equipCache.get(eq) !== st) { equipCache.set(eq, st); call('setEquipmentState', eq, st); }
   }
+  // overheats in the shown plan this hour -> zone glows red (fades in over the hour)
+  const hr = Math.floor(S.t);
+  const hot = new Map();
+  for (const o of plan.overheats || []) if (o.hour === hr) hot.set(o.zone, Math.max(hot.get(o.zone) || 0, clamp01((o.temp_c - 31) / 3)));
+  for (const z of ['Z1', 'Z2', 'Z3', 'Z4']) {
+    const lvl = hot.get(z) || 0;
+    if (zoneAlertCache.get(z) !== lvl) { zoneAlertCache.set(z, lvl); call('setZoneAlert', z, lvl); }
+  }
   call('setHour', S.t);
 }
 
@@ -308,11 +317,20 @@ function updateScoreboard() {
     row.classList.toggle('zero', g === 0);
     row.classList.toggle('shown', S.show === key);
   }
-  setText('sb-clock', hourLabel(S.t).toUpperCase());
+  for (const [key, suffix] of [['optimized', 'ours'], ['asap', 'asap']]) {
+    const n = plans[key].overheats.filter(o => o.hour < S.t).length;
+    const w = $(`sb-heatw-${suffix}`);
+    if (w.dataset.n !== String(n)) {
+      w.dataset.n = String(n);
+      w.innerHTML = `<b id="sb-heat-${suffix}">${n}</b> ${n === 1 ? 'overheat' : 'overheats'}`;
+    }
+    w.classList.toggle('hot', n > 0);
+  }
+  setText('sb-clock', hourLabel(S.t));
   const status = S.t >= HOURS ? 'Final'
-    : !S.playing ? '❚❚ Paused'
-    : S.boosting ? '▶▶ Quiet hours'
-    : `▶ ${S.speed}× · day ${Math.min(7, Math.floor(S.t / 24) + 1)}/7`;
+    : !S.playing ? 'Paused'
+    : S.boosting ? 'Skipping quiet hours'
+    : `Playing at ${S.speed}×, day ${Math.min(7, Math.floor(S.t / 24) + 1)} of 7`;
   setText('sb-status', status);
   $('sb-status').classList.toggle('ff', S.boosting && S.playing && S.t < HOURS);
 
@@ -339,13 +357,13 @@ function updateTicker() {
   $('ticker-list').innerHTML = tail.map((e, idx) => {
     const fresh = grew && idx === tail.length - 1 ? ' class="fresh"' : '';
     if (e.kind === 'week') return `<li${fresh}><time>${hourLabel(e.h)}</time><span class="what">${esc(e.text)}</span></li>`;
-    const tag = `<span class="tag ${e.plan === 'optimized' ? 'ours' : 'asap'}">${e.plan === 'optimized' ? 'OURS' : 'ASAP'}</span>`;
+    const tag = `<span class="tag ${e.plan === 'optimized' ? 'ours' : 'asap'}">${e.plan === 'optimized' ? 'Ours' : 'ASAP'}</span>`;
     const body = e.kind === 'heat'
-      ? `<b class="heat">Zone ${esc(e.oh.zone)} overheated</b> · ${e.oh.temp_c.toFixed(1)} °C · ${num(e.oh.gpus_lost)} GPUs lost · ${money(e.oh.cost)}`
+      ? `<b class="heat">Zone ${esc(e.oh.zone)} overheated</b> at ${e.oh.temp_c.toFixed(1)} °C, ${num(e.oh.gpus_lost)} GPUs lost, ${money(e.oh.cost)}`
       : e.kind === 'start'
-      ? `<b>${esc(e.it.name)}</b> started · ${num(e.it.gpus_offline)} GPUs offline`
-      : `<b>${esc(e.it.name)}</b> done · ${money(e.it.total)}`;
-    return `<li${fresh}>${tag}<time>${hourLabel(e.h)}</time><span class="what">— ${body}</span></li>`;
+      ? `<b>${esc(e.it.name)}</b> started, ${num(e.it.gpus_offline)} GPUs down`
+      : `<b>${esc(e.it.name)}</b> done, ${money(e.it.total)}`;
+    return `<li${fresh}>${tag}<time>${hourLabel(e.h)}</time><span class="what">${body}</span></li>`;
   }).join('');
 }
 
@@ -385,7 +403,7 @@ function showSummary() {
   }
   const heatShare = saved > 0 ? (a.overheat_cost - o.overheat_cost) / saved : 0;
   sub.textContent = `${o.items.length} jobs, ${cloud ? 'priced as lost revenue + SLA credits' : 'priced as replacement rental'}. `
-    + (sameGH ? 'Same work and the same GPU-hours offline — only the timing changed. ' : 'Both plans obey the same windows and cooling-zone rules. ')
+    + (sameGH ? 'Same work and the same GPU-hours offline; only the timing changed. ' : 'Both plans obey the same windows and cooling-zone rules. ')
     + (a.overheats.length && !o.overheats.length
       ? `ASAP overheated ${a.overheats.length} zone-hours; ours none. ${pct(heatShare)} of the savings is those overheats, priced as unplanned outages (assumed rate).`
       : '');
@@ -407,9 +425,9 @@ function onRackClick({ rackId, zone, screenX, screenY } = {}) {
     <div class="p-head"><span class="p-id">${esc(rackId)}</span><button class="p-x" aria-label="Close">×</button></div>
     <div class="p-meta"><i class="zone" style="--zc:${ZONE_VAR[z] || 'var(--ink-3)'}">${esc(z)}</i><span>${per}</span><span class="state ${st}">${st}</span></div>
     <div class="p-task">
-      ${now ? `<b>${esc(now.name)}</b><span class="mono">${esc(now.start_label)} → ${esc(now.end_label)} · ${money(now.total)}</span>`
+      ${now ? `<b>${esc(now.name)}</b><span class="mono">${esc(now.start_label)} to ${esc(now.end_label)}, ${money(now.total)}</span>`
             : `<b>No work right now</b>`}
-      <div class="mono" style="margin-top:4px">${next ? `Next: ${esc(shortName(next.name))} · ${esc(next.start_label)}` : 'No more work this week'} <span style="opacity:.7">(${PLAN_LABEL[S.show]})</span></div>
+      <div class="mono" style="margin-top:4px">${next ? `Next: ${esc(shortName(next.name))}, ${esc(next.start_label)}` : 'No more work this week'} <span style="opacity:.7">(${PLAN_LABEL[S.show]})</span></div>
     </div>`;
   pop.hidden = false;
   const w = pop.offsetWidth, h = pop.offsetHeight;
@@ -545,7 +563,7 @@ function render(now) {
   const scrub = $('scrub');
   if (document.activeElement !== scrub || !S.playing) scrub.value = S.t.toFixed(2);
   scrub.style.setProperty('--p', `${(100 * S.t / HOURS).toFixed(2)}%`);
-  setText('time-aside', `${hourLabel(S.t)} · ${DAYS[Math.min(6, Math.floor(S.t / 24))] === 'Sun' && S.t >= HOURS ? 'end' : `h ${Math.floor(S.t)}`}`);
+  setText('time-aside', S.t >= HOURS ? 'End of week' : hourLabel(S.t));
   if (S.t >= HOURS) showSummary();
 }
 
@@ -561,7 +579,8 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   if (['1', '4', '16'].includes(Q.get('speed'))) { S.speed = Number(Q.get('speed')); setSeg('seg-speed', Q.get('speed')); }
   wireControls();
   pushView();
-  initHall();
+  // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)
+  initHall().then(() => { for (let i = 0; i < (Number(Q.get('turn')) || 0) % 4; i++) call('rotate', +1); });
   initAgentPanel();
   window.addEventListener('agent:plan', onAgentPlan);
   loadMode(S.mode);

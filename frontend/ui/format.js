@@ -24,5 +24,5 @@ export function esc(s) {
 
 /** Short name for tight spaces: "CRAC-2 compressor replacement" -> "CRAC-2 compressor". */
 export function shortName(name) {
-  return name.replace(/\s*\((row [A-D])\)/i, ' · $1').replace(/ replacement$/i, '');
+  return name.replace(/\s*\((row [A-D])\)/i, ', $1').replace(/ replacement$/i, '');
 }

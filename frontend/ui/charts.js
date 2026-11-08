@@ -58,7 +58,7 @@ export function createPriceChart(container, prices) {
     const hit = el('rect', { class: 'hit', x: cx - colW / 2, y: 0, width: colW, height: H }, g);
     hit.addEventListener('mouseenter', () => {
       tip.hidden = false;
-      tip.innerHTML = `<b>${DAYS[p.day % 7]}</b> · $${p.price.toFixed(2)}/hr<br>band $${p.low.toFixed(2)}–$${p.high.toFixed(2)}`;
+      tip.innerHTML = `<b>${DAYS[p.day % 7]}</b> $${p.price.toFixed(2)}/hr<br>likely $${p.low.toFixed(2)} to $${p.high.toFixed(2)}`;
       tip.style.left = `${Math.min(Math.max(cx, 60), W - 60)}px`;
       tip.style.top = `${y(p.high)}px`;
     });
@@ -125,7 +125,7 @@ export function createGantt(container, plans, taskOrder) {
         width: Math.max(1.5, x(it.end_hour) - x(it.start_hour)), height: rowH,
       }, svg);
       const t = el('title', {}, b);
-      t.textContent = `${label}: ${it.name} · ${it.start_label}–${it.end_label} · ${money(it.total)}`;
+      t.textContent = `${label}: ${it.name}, ${it.start_label} to ${it.end_label}, ${money(it.total)}`;
       blocks.push({ b, id: it.task_id });
     });
   });

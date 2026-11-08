@@ -7,8 +7,10 @@ Weekly snapshots, 2025-11-03 to 2026-11-02, across cloud providers. One row per
 (date, billing_type, reservation_months) with min/max/median $/GPU-hr and provider counts.
 `app/market.py` reads the ON_DEMAND median. This is a snapshot, not a live feed.
 
-License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Attribution:
-GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0
+License: **CC BY 4.0** (https://creativecommons.org/licenses/by/4.0/).
+Credit: GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0.
+Changes: we derive a daily forecast (trend + volatility band) from the weekly medians.
+The credit is shown in the UI under the H100 price chart (frontend/index.html).
 
 Note: `median_price` is the median across offerings (H100 2026-11-02: $4.0225, 128 offerings);
 `provider_median_price` is the median across providers ($3.9575, 46 providers). market.py uses `median_price`.
