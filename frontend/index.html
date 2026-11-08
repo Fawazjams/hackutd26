@@ -74,6 +74,8 @@
         <span class="sb-delta" title="Share of this week's final savings already banked"><i id="sb-delta"></i></span>
         <div class="sb-clockline"><span class="sb-clock" id="sb-clock">Mon 00:00</span><span class="sb-status" id="sb-status"></span></div>
       </div>
+      <!-- key moments so far, newest on top; click a row to jump to that hour -->
+      <ol class="bt-log" id="bt-log" hidden aria-label="Key moments so far"></ol>
     </section>
   </header>
 
@@ -88,7 +90,6 @@
   <section class="beat" id="beat" hidden aria-live="polite" aria-label="Key moment">
     <div class="bt-head"><span class="bt-kicker">Key moment, <span id="bt-when"></span></span><button class="bt-x" id="bt-close" aria-label="Close">×</button></div>
     <div id="bt-list"></div>
-    <ol class="bt-log" id="bt-log" hidden></ol>
   </section>
 
   <section class="alarm" id="alarm" hidden role="alert" aria-label="Simulated alarm">

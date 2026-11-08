@@ -28,7 +28,7 @@ function coolingPairs(plan) {
   return out;
 }
 
-/** [{hour, plan: 'optimized'|'asap', title, text}] sorted by hour. */
+/** [{hour, plan: 'optimized'|'asap', contrast?: 'optimized', title, text}] sorted by hour. */
 export function buildBeats(ours, asap) {
   if (!ours?.items || !asap?.items) return [];
   const beats = [];
@@ -62,7 +62,7 @@ export function buildBeats(ours, asap) {
       : ov === 0 ? ' Our plan never runs them together.'
       : ` Our plan overlaps them for ${ov} h, from ${hourLabel(Math.max(oa.start_hour, ob.start_hour))}.`;
     beats.push({
-      hour: Math.max(a.start_hour, b.start_hour), plan: 'asap',
+      hour: Math.max(a.start_hour, b.start_hour), plan: 'asap', contrast: 'optimized',   // director: then show ours, same hour
       title: 'ASAP takes down two cooling units at once',
       text: `${a.equipment} (zone ${a.zone}) and ${b.equipment} (zone ${b.zone}) both start at ${hourLabel(Math.max(a.start_hour, b.start_hour))}. Neighboring zones back each other up on cooling, so this leaves no backup.${oursText}`,
     });
@@ -84,7 +84,7 @@ export function buildBeats(ours, asap) {
       const theirs = tempAt(other, oh.hour, oh.zone);
       const episode = hot.filter(x => x.hour >= oh.hour && x.hour <= lastHour + 3);
       beats.push({
-        hour: oh.hour, plan: key,
+        hour: oh.hour, plan: key, ...(key === 'asap' ? { contrast: 'optimized' } : {}),
         title: `${label}: zone ${oh.zone} overheats`,
         text: `Zone ${oh.zone} reaches ${deg(oh.temp_c)}${limit != null ? `, over the ${deg(limit)} limit` : ''}${why}. `
           + `${num(oh.gpus_lost)} GPUs lost this hour, ${money(oh.cost)}.`
