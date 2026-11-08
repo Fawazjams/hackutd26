@@ -25,6 +25,12 @@ const ROW_Z = [-7.5, -2.5, 2.5, 7.5];          // row A..D centre lines
 const RACK_X0 = -11, RACK_DX = 2.0;            // 10 racks per row: x = -11 .. 7
 const RACK = { w: 1.7, h: 3.0, d: 1.5 };
 const HALL = { x0: -16, x1: 16, z0: -11, z1: 11, wallH: 5.2 };
+const HALL_SCALE = 1.3;
+// campus sections pushed outward to frame the bigger apron (apron edge: x ±23.4, z ±16.9; island ±35 x ±27)
+const CAMPUS_OFFSET = {
+  paths: [0, 0], chillers: [0, -4.5], towers: [-2.5, 0], generators: [2, 0], substation: [3, 4],
+  dock: [0, 3.3], parking: [0, 2.5], gate: [-3, 3], fence: [0, 0],
+};                         // the data hall is the main show: drawn 1.3x on a bigger apron
 
 // seeded RNG (mulberry32) so trees, rocks and blink patterns never change between runs
 function rng(seed) {
@@ -375,8 +381,13 @@ export async function createDataCenter(containerEl) {
     outside.setNight(state.night);
     // tint the stage itself: cream by day, dusk lavender at night (kept light so overlay text stays readable)
     // page ground: drafting vellum by day, a cool dusk at night (light enough for the ink text)
-    const sky = new THREE.Color(0xe8ecec).lerp(new THREE.Color(0xc2cad6), state.night * 0.9);
-    document.documentElement.style.setProperty('--sky', `#${sky.getHexString()}`);
+    // sky: soft blue by day, dusk blue at night (kept light near the ground so overlay text stays readable)
+    const sky = new THREE.Color(0xdcedf7).lerp(new THREE.Color(0xb8c3d8), state.night * 0.9);
+    const skyTop = new THREE.Color(0x9fcdee).lerp(new THREE.Color(0x4f6290), state.night * 0.9);
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--sky', `#${sky.getHexString()}`);
+    rootStyle.setProperty('--sky-top', `#${skyTop.getHexString()}`);
+    rootStyle.setProperty('--cloud-alpha', (1 - state.night * 0.65).toFixed(3));
   }
 
   // ================================================================ PROVIDER ISLANDS + NEGOTIATOR DRONE
@@ -505,7 +516,7 @@ export async function createDataCenter(containerEl) {
       const key = i < 0 ? null : zoneId;
       if (key === shot.zone) return;
       shot.zone = key;
-      if (key) { shot.pos.set(-2, 1, ROW_Z[i]); cam.zoomTarget = 2.0; }
+      if (key) { shot.pos.set(-2 * HALL_SCALE, 1, ROW_Z[i] * HALL_SCALE); cam.zoomTarget = 1.8; }
       else { shot.pos.copy(home); cam.zoomTarget = 1; }
     },
     /** Float in one small data-center island per provider [{id, name}] and zoom out to fit. */
@@ -609,6 +620,7 @@ function buildIsland(parent, R) {
   const plate = new THREE.Mesh(new THREE.BoxGeometry(16.25, 3.0, 0.14),
     [side, side, side, side, new THREE.MeshLambertMaterial({ map: tbTex, emissive: 0xffffff, emissiveMap: tbTex, emissiveIntensity: 0.12 }), side]);
   plate.position.set(-9, -2.55, D / 2 + 0.08);
+  plate.visible = false;   // decoration off: the hall is the main show
   g.add(plate);
   return g;
 }
@@ -621,40 +633,16 @@ function buildCampus(parent, R, anim) {
   const nightMats = [];
 
   // concrete apron + paths
-  box(36, 0.3, 26, mat(C.concrete), 0, 0.15, 0, g);
-  // dimension lines + survey ticks on the apron margin around the hall, in drawing ink
-  {
-    const PX = 32, AW = 36, AD = 26;
-    const X = (x) => (x + AW / 2) * PX, Z = (z) => (z + AD / 2) * PX;
-    const tex = markTexture(AW * PX, AD * PX, (c) => {
-      c.strokeStyle = SHEET.ink; c.fillStyle = SHEET.ink; c.lineWidth = 2;
-      const tick = (x, z) => { c.beginPath(); c.moveTo(x - 7, z + 7); c.lineTo(x + 7, z - 7); c.stroke(); };
-      const ext = (x1, z1, x2, z2) => { c.beginPath(); c.moveTo(x1, z1); c.lineTo(x2, z2); c.stroke(); };
-      // south: overall hall length
-      const zs = Z(12.25);
-      ext(X(-16), Z(11.45), X(-16), Z(12.7)); ext(X(16), Z(11.45), X(16), Z(12.7)); ext(X(-16), zs, X(16), zs);
-      tick(X(-16), zs); tick(X(16), zs);
-      c.font = `700 ${0.9 * PX}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'bottom';
-      const label = (txt, x, z) => { const m = c.measureText(txt).width + 12; c.fillStyle = SHEET.vellum; c.fillRect(x - m / 2, z - 0.95 * PX, m, 0.9 * PX); c.fillStyle = SHEET.ink; c.fillText(txt, x, z - 4); };
-      label('32 000', X(-2), zs + 0.45 * PX);
-      // east: overall hall width (text runs along the line)
-      const xe = X(17.2);
-      ext(X(16.45), Z(-11), X(17.7), Z(-11)); ext(X(16.45), Z(11), X(17.7), Z(11)); ext(xe, Z(-11), xe, Z(11));
-      tick(xe, Z(-11)); tick(xe, Z(11));
-      c.save(); c.translate(xe, Z(0)); c.rotate(-Math.PI / 2); label('22 000', 0, 0.45 * PX); c.restore();
-      // teal datum crosses at the apron corners (chilled-water teal = our plan's colour)
-      c.strokeStyle = SHEET.teal; c.lineWidth = 3;
-      for (const [x, z] of [[-17.2, -12.2], [17.2, -12.2], [-17.2, 12.2], [17.2, 12.2]]) {
-        ext(X(x) - 12, Z(z), X(x) + 12, Z(z)); ext(X(x), Z(z) - 12, X(x), Z(z) + 12);
-        c.beginPath(); c.arc(X(x), Z(z), 7, 0, Math.PI * 2); c.stroke();
-      }
-    });
-    decal(AW, AD, tex, 0, 0.305, 0, g);
-  }
+  box(36 * HALL_SCALE, 0.3, 26 * HALL_SCALE, mat(C.concrete), 0, 0.15, 0, g);
+  // campus extras below (paths, chillers, towers, generators, substation, dock, parking, gate, fence)
+  // stay built for their animations but are hidden: the data hall is the main show
+  const extrasFrom = g.children.length;
+  const sec = [['paths', extrasFrom]];   // [section, first child index]: each section is moved out below
   box(4, 0.25, 12, mat(C.concreteDark), 6, 0.12, 19, g);        // drive to loading dock
   box(26, 0.22, 3, mat(C.concreteDark), -14, 0.11, 15, g);       // footpath
   box(3, 0.22, 10, mat(C.concreteDark), 21, 0.11, 2, g);         // path to generators
 
+  sec.push(['chillers', g.children.length]);
   // ---- chiller yard (north): 6 air-cooled chillers with spinning fans
   const fanMat = mat(C.steelDark);
   const fans = [];
@@ -673,6 +661,7 @@ function buildCampus(parent, R, anim) {
   box(0.5, 0.5, 5, mat(0x4a8fd1), -6, 0.9, -13.5, g);
   box(0.5, 0.5, 5, mat(0xd1574a), -4.5, 0.9, -13.5, g);
 
+  sec.push(['towers', g.children.length]);
   // ---- cooling towers (west) with vapour
   const steam = [];
   const steamGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -691,6 +680,7 @@ function buildCampus(parent, R, anim) {
   for (let i = 0; i < 60; i++) steam.push({ tw: i % 2, t: R(), ox: (R() - 0.5) * 2, oz: (R() - 0.5) * 2, s: 0.6 + R() * 0.7 });
   const dummy = new THREE.Object3D();
 
+  sec.push(['generators', g.children.length]);
   // ---- diesel generators + fuel tank (east)
   for (let i = 0; i < 3; i++) {
     const z = -8 + i * 5.2;
@@ -703,6 +693,7 @@ function buildCampus(parent, R, anim) {
   tank.rotation.x = Math.PI / 2;
   box(0.3, 1.0, 6, mat(C.steelDark), 30.5, 0.5, -2, g);
 
+  sec.push(['substation', g.children.length]);
   // ---- substation (south-east) with transformers and a pylon line off the edge
   box(10, 0.3, 8, mat(0x9b958a), 26, 0.15, 17, g);
   for (let i = 0; i < 3; i++) {
@@ -722,6 +713,7 @@ function buildCampus(parent, R, anim) {
   box(8, 0.06, 0.06, mat(C.ink), 28, 8.4, 21.5, g);
   box(0.06, 0.06, 6, mat(C.ink), 32, 8.4, 24.5, g);
 
+  sec.push(['dock', g.children.length]);
   // ---- loading dock + truck (south) delivering GPU crates
   box(8, 1.2, 3, mat(C.concreteDark), 6, 0.6, 12.5, g);
   const truck = new THREE.Group();
@@ -745,6 +737,7 @@ function buildCampus(parent, R, anim) {
   lift.position.set(10, 0.3, 15.5);
   g.add(lift);
 
+  sec.push(['parking', g.children.length]);
   // ---- parking with a solar canopy (south-west)
   box(16, 0.22, 8, mat(0x8f8b84), -16, 0.11, 20, g);
   for (let i = 0; i < 5; i++) box(0.12, 0.02, 3, mat(C.white), -22.5 + i * 3.2, 0.24, 20.5, g);
@@ -762,12 +755,14 @@ function buildCampus(parent, R, anim) {
   solar.rotation.x = -0.12;
   box(13.2, 0.1, 7.2, mat(C.steel), -16, 3.35, 20.5, g).rotation.x = -0.12;
 
+  sec.push(['gate', g.children.length]);
   // ---- gatehouse + boom gate
   box(3, 2.6, 3, mat(C.white), -27, 1.5, 15, g);
   box(3.4, 0.3, 3.4, mat(C.ours), -27, 2.95, 15, g);
   box(1.6, 0.8, 0.1, mat(C.glass), -27, 1.8, 16.5, g);
   const boom = box(5, 0.15, 0.15, mat(0xe8572e), -23.2, 1.3, 16.8, g);
 
+  sec.push(['fence', g.children.length]);
   // ---- fence around the campus edge (instanced posts)
   const postGeo = new THREE.BoxGeometry(0.14, 1.6, 0.14);
   const posts = [];
@@ -780,14 +775,29 @@ function buildCampus(parent, R, anim) {
   for (const z of [-25.5, 25.5]) box(66, 0.06, 0.06, mat(C.steel), 0, 1.4, z, g);
   for (const x of [-33.5, 33.5]) box(0.06, 0.06, 47, mat(C.steel), x, 1.4, 0, g);
 
+  // the hall is drawn HALL_SCALE x on a bigger apron: move each campus section outward so it frames
+  // the apron instead of overlapping it (x, z offsets in world units)
+  sec.push(['end', g.children.length]);
+  for (let k = 0; k < sec.length - 1; k++) {
+    const [dx, dz] = CAMPUS_OFFSET[sec[k][0]] || [0, 0];
+    for (const o of g.children.slice(sec[k][1], sec[k + 1][1])) { o.position.x += dx; o.position.z += dz; }
+  }
+  // paths: drive to the dock, footpath to parking, path to generators
+  const [drive, foot, genPath] = g.children.slice(extrasFrom, extrasFrom + 3);
+  drive.position.z += CAMPUS_OFFSET.dock[1];
+  foot.position.z += CAMPUS_OFFSET.parking[1];
+  genPath.position.x += CAMPUS_OFFSET.generators[0];
+
   // ---- trees (instanced pines + round trees), seeded, avoiding built areas
-  const busy = [
-    [-17, 17, -12, 12], [-18, 14, -21, -12], [-31, -22, -12, 4], [21, 33, -11, 6], [20, 32, 12, 22],
-    [-25, -7, 15, 25], [1, 12, 11, 25], [-30, -24, 12, 18], [16, 24, -4, 8],
-  ];
+  const AX = 18 * HALL_SCALE + 1, AZ = 13 * HALL_SCALE + 1;   // keep trees off the (bigger) apron
+  const moved = (name, r) => { const [dx, dz] = CAMPUS_OFFSET[name]; return [r[0] + dx, r[1] + dx, r[2] + dz, r[3] + dz]; };
+  const busy = [[-AX, AX, -AZ, AZ],
+    moved('chillers', [-18, 14, -21, -12]), moved('towers', [-31, -22, -12, 4]), moved('generators', [21, 33, -11, 6]),
+    moved('substation', [20, 32, 12, 22]), moved('parking', [-25, -7, 15, 25]), moved('dock', [1, 12, 11, 25]),
+    moved('gate', [-30, -24, 12, 18]), moved('generators', [16, 24, -4, 8])];
   const free = (x, z) => !busy.some(([a, b, c, d]) => x > a - 1 && x < b + 1 && z > c - 1 && z < d + 1);
   const spots = [];
-  for (let i = 0; i < 400 && spots.length < 70; i++) {
+  for (let i = 0; i < 500 && spots.length < 50; i++) {
     const x = (R() - 0.5) * 64, z = (R() - 0.5) * 48;
     if (free(x, z) && spots.every(([sx, sz]) => (sx - x) ** 2 + (sz - z) ** 2 > 5)) spots.push([x, z, 0.8 + R() * 0.7, R()]);
   }
@@ -814,6 +824,7 @@ function buildCampus(parent, R, anim) {
     dummy.position.set(x, 0.6 * s, z); dummy.updateMatrix(); trunks.setMatrixAt(i, dummy.matrix);
   });
 
+  const lampsFrom = g.children.length;
   // ---- lamp posts (emissive heads light up at night)
   const lampMat = new THREE.MeshLambertMaterial({ color: 0xfff3c4, emissive: 0xffd36b, emissiveIntensity: 0 });
   nightMats.push(lampMat);
@@ -835,6 +846,13 @@ function buildCampus(parent, R, anim) {
     const segs = wk.path.map((a, i) => { const b = wk.path[(i + 1) % wk.path.length]; return Math.hypot(b[0] - a[0], b[1] - a[1]); });
     return { ...wk, p, segs, len: segs.reduce((s, v) => s + v, 0) };
   });
+
+  for (const o of g.children.slice(lampsFrom)) { o.position.x *= 1.25; o.position.z *= 1.25; }   // lamps to the apron edge
+  for (const wk of walkers) {   // walk loops around the bigger hall
+    wk.path = wk.path.map(([x, z]) => [x * 1.1, z * 1.1]);
+    wk.segs = wk.path.map((a, i) => { const b = wk.path[(i + 1) % wk.path.length]; return Math.hypot(b[0] - a[0], b[1] - a[1]); });
+    wk.len = wk.segs.reduce((t, v) => t + v, 0);
+  }
 
   anim.push((t, dt) => {
     for (const f of fans) f.rotation.y += dt * 9;
@@ -864,7 +882,7 @@ function buildCampus(parent, R, anim) {
       wk.p.rotation.y = Math.atan2(b[0] - a[0], b[1] - a[1]);
     }
     boom.rotation.z = Math.max(0, Math.sin(t * 0.4)) * 1.2;
-    boom.position.x = -23.2 - (1 - Math.cos(boom.rotation.z)) * 2.5;
+    boom.position.x = -23.2 + CAMPUS_OFFSET.gate[0] - (1 - Math.cos(boom.rotation.z)) * 2.5;
     boom.position.y = 1.3 + Math.sin(boom.rotation.z) * 2.5;
   });
 
@@ -889,6 +907,7 @@ function person(color) {
 function buildHall(parent, R, anim) {
   const g = new THREE.Group();
   parent.add(g);
+  g.scale.setScalar(HALL_SCALE);
   const { x0, x1, z0, z1, wallH } = HALL;
   const W = x1 - x0, D = z1 - z0;
 
@@ -1088,7 +1107,7 @@ function buildHall(parent, R, anim) {
     { n: [-1, 0], m: box(0.4, wallH, D, wallMat, x0 + 0.2, Y + wallH / 2, 0, g) },
     { n: [1, 0], m: box(0.4, wallH, D, wallMat, x1 - 0.2, Y + wallH / 2, 0, g) },
   ];
-  for (const wl of walls) { wl.k = 1; wl.base = wl.m.position.y; }
+  for (const wl of walls) { wl.k = 1; wl.base = wl.m.position.y; wl.m.visible = false; }   // open-plan: no walls
   // signage + louvres on each wall (children follow the wall's cutaway)
   const sign = canvasTexture(128, 32, (c, w, h) => {
     c.fillStyle = '#17232b'; c.fillRect(0, 0, w, h);
@@ -1150,6 +1169,7 @@ function buildHall(parent, R, anim) {
     racks, byId, pickables, equipment, techPool,
     setCutaway(cx, cz) {
       // camera direction (from target to camera) in xz; walls whose outward normal faces it go low
+      return;   // walls are hidden (open-plan hall), nothing to cut away
       for (const wl of walls) {
         const facing = wl.n[0] * cx + wl.n[1] * cz;
         const want = facing > 0.25 ? 0.16 : 1;
