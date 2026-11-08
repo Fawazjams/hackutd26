@@ -199,7 +199,7 @@ function groupedBars(labels, a, b, tip, { W = 600, H = 260, ariaLabel = '' } = {
 }
 
 // ---------- build ----------
-function build({ plans, backlog, prices, mode }) {
+function build({ plans, backlog, prices, mode }, { inline = false } = {}) {
   const ours = plans?.optimized || { items: [], overheats: [], total_cost: 0 };
   const asap = plans?.asap || { items: [], overheats: [], total_cost: 0 };
   const co = cumulative(ours), ca = cumulative(asap);
@@ -214,13 +214,31 @@ function build({ plans, backlog, prices, mode }) {
   const firstDate = prices?.[0]?.date, lastDate = prices?.[prices.length - 1]?.date;
   const savedCum = co.cum.map((v, i) => ca.cum[i] - v);
 
+  const nO = ours.overheats?.length || 0, nA = asap.overheats?.length || 0;
+  const ohPhrase = nO === 0 ? 'with no overheats' : `with ${nO} overheated zone-hour${nO === 1 ? '' : 's'} against ${nA}`;
+  const summary = saved >= 0
+    ? `Our plan costs ${usd(oursTotal)} against ${usd(asapTotal)} for ASAP, saving ${usd(saved)}, ${ohPhrase}.`
+    : `Our plan costs ${usd(oursTotal)} against ${usd(asapTotal)} for ASAP, ${usd(-saved)} more, ${ohPhrase}.`;
+
   const root = document.createElement('div');
-  root.className = 'rp-overlay';
-  root.setAttribute('role', 'dialog');
-  root.setAttribute('aria-modal', 'true');
-  root.setAttribute('aria-labelledby', 'rp-title');
-  root.innerHTML = `
-  <div class="rp-sheet">
+  if (inline) {
+    root.className = 'rp-inline';
+    root.setAttribute('aria-labelledby', 'rp-title-inline');
+  } else {
+    root.className = 'rp-overlay';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-labelledby', 'rp-title');
+  }
+  const head = inline ? `
+    <header class="rp-head rp-head-inline">
+      <div>
+        <h1 id="rp-title-inline">The week's bottom line</h1>
+        <p class="rp-summary">${esc(summary)}</p>
+        <div class="rp-sub">${firstDate ? `Week of ${esc(firstDate)} to ${esc(lastDate)}, ` : ''}${cloud ? 'GPU cloud' : 'private DC'}, ${(backlog || []).length} jobs in the backlog.</div>
+      </div>
+      <div class="rp-actions"><button type="button" class="rp-btn" data-act="print">Print</button></div>
+    </header>` : `
     <header class="rp-head">
       <div>
         <div class="rp-kicker">Maintenance schedule, sheet 1 of 1</div>
@@ -231,7 +249,9 @@ function build({ plans, backlog, prices, mode }) {
         <button type="button" class="rp-btn" data-act="print">Print</button>
         <button type="button" class="rp-close" data-act="close" aria-label="Close report">×</button>
       </div>
-    </header>
+    </header>`;
+  root.innerHTML = `
+  <div class="rp-sheet">${head}
     <section class="rp-kpis" aria-label="Headline numbers"></section>
     <section class="rp-grid2">
       <figure class="rp-card rp-wide" data-fig="cum">
@@ -313,6 +333,27 @@ export function closeReport() {
   document.body.classList.remove('rp-printing');
   open = null;
   prevFocus?.focus?.();
+}
+
+function printInline(root) {
+  document.querySelectorAll('.rp-print-target').forEach((n) => n.classList.remove('rp-print-target'));
+  root.classList.add('rp-print-target');
+  document.body.classList.add('rp-printing-inline');
+  const done = () => { document.body.classList.remove('rp-printing-inline'); root.classList.remove('rp-print-target'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  window.print();
+}
+
+// Render the dashboard inline inside `host`. Safe to call again to refresh.
+export function renderReport(host, { plans, backlog, prices, mode } = {}) {
+  if (!host) return null;
+  injectCss();
+  const root = build({ plans, backlog, prices, mode }, { inline: true });
+  root.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act]')?.dataset.act === 'print') printInline(root);
+  });
+  host.replaceChildren(root);
+  return root;
 }
 
 export function openReport({ plans, backlog, prices, mode } = {}) {
