@@ -15,12 +15,36 @@
 - Track 3: **maybe, TBD.**
 
 ## Team
-| Name | Phase 1: GPU compute core | Later |
-|------|---------------------------|-------|
-| **Fawaz** | Price curve + cost model | UI (Three.js) |
-| **Nandhan** | Task model + optimizer + naive baseline | |
-| **Loki** | Data-center sim + seeded backlog | |
-| First to finish phase 1 | | Starts Nemotron agent (phase 2) |
+Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21:50 Sat.
+
+| Name | Done | Owns now |
+|------|------|----------|
+| **Loki** | backlog, simulate, Nemotron `/request` agent, PR #1 merge | prices + cost model (from Fawaz), agent UI panel, Devpost/README/video/pitch |
+| **Nandhan** | `/plan` optimizer + ASAP, planner UI, fallback snapshot | thermal-aware planner, 3D hall scene, UI integration |
+
+## Task board (deadline Sun 09:00; Harden phase: finish the journey, no extras)
+**P0: before 01:00 (MVP becomes demo-complete)**
+- [ ] Loki: register team on Devpost by **23:00** (paste docs/DEVPOST.md)
+- [ ] Loki: `frontend/ui/agent-panel.js` (own file): enable "Ask Nemotron" box, POST /request, show live tool-call trace, explanation, "thinking" state (~13-40 s), swap the new plan into the scoreboard. Nandhan adds the one import in main.js.
+- [ ] Nandhan: thermal-aware optimizer: reject any plan where `simulate.find_conflicts`/`simulate_plan` reports violations (or add a neighbor-cooling rule), so "optimized never overheats" is true by design.
+- [ ] Loki: cost model into `prices.py`: fix risk term to (1-p)*planned + p*unplanned, real `/cost` from it, keep `stubs.slot_cost` as a thin re-export so planner is untouched.
+- [ ] Loki: make the daily price curve drive decisions (savings should come mostly from price, not invented utilization dips); flatten/dampen utilization dips; re-run test_optimized_beats_asap and regenerate fallback-plans.js.
+
+**P1: before 04:00 (polish that judges see)**
+- [ ] Nandhan: 3D hall (scene.js): racks go dark on schedule, zones glow red on overheat during ASAP playback.
+- [ ] Loki: agent re-plan for real: when the new task causes a violation, Nemotron sees it from `simulate` and re-plans (needs thermal-aware planner); trace shows the re-plan.
+- [ ] Loki (NMC² "unclear handoff"): `/handoff`: Nemotron writes a shift handoff / work order per scheduled task from tool numbers only (what, when, racks, zone temps to watch, risk if delayed). Button in the UI.
+- [ ] Nandhan: end-of-week summary shows $ saved and "0 overheats vs 5" side by side.
+
+**P2: 04:00-06:00 harden**
+- [ ] Both: rehearse 3 scripted + 1 unscripted request; same output every run; kill Wi-Fi once and confirm fallback.
+- [ ] Loki: README (run steps, architecture, honesty), secret scan (no keys in git).
+
+**P3: 06:00-08:30 present**
+- [ ] Loki: 2-min video (docs/DEMO_SCRIPT.md), final Devpost with real $ figures.
+- [ ] Both: pitch rehearsal x3; each person can answer "where do the savings come from" and "what does Nemotron decide vs code".
+
+**Cut / stretch:** live price feed tool (only if P0-P1 done), fine-tuning, calls/texts.
 
 ## Problem (NMC² format)
 **When** a GPU data center has to take equipment offline for maintenance, **the operations lead struggles to** decide what to take down and when, **because** they can't see what each lost GPU-hour is worth on today's compute market. **Our solution helps them** schedule maintenance at the lowest compute cost without letting failure risk get out of hand, **improving** the dollars of GPU capacity lost per maintenance cycle (measured against a "do it ASAP during business hours" plan).
@@ -136,3 +160,4 @@ Sleep in shifts; someone is always building.
 - 21:3x Loki: phase 2 `/request` agent on main (Nemotron via build.nvidia.com, 7 deterministic tools, code re-plans on violations, explanation numbers checked against tool output, offline fallback for 3 rehearsed requests in app/demo_requests.py). 30 tests. `backend/scripts/nemotron_check.py` probes models/tool calling/rate limit once NVIDIA_API_KEY is in .env. Draft docs/DEVPOST.md + docs/DEMO_SCRIPT.md. TODO: align agent.py EQUIPMENT names with Nandhan's frontend contract; re-check Mon Z2/Z3 overheat with the real ASAP baseline.
 - 21:40 Loki merged PR #1 (Nandhan: /plan optimizer + ASAP baseline + planner UI). Contract = Nandhan's app/models.py (mode "cloud", racks "A01".."D10", Plan.items/unscheduled); schemas.py re-exports it. Backlog/simulate/agent adapted; stubs.seeded_backlog() now returns Loki's backlog; fallback-plans.js regenerated. Seeded week: ASAP $13,248.58 with 5 overheat violations (CRAC-2 + CDU-3 Mon 09:00) vs optimized $12,772.56 clean. 44 tests. Open: planner doesn't check thermal (optimized is clean by luck; wire simulate_plan in), /cost still Fawaz's stub (real cost model lives in stubs.slot_cost), /prices served from stubs in main.py.
 - 21:45 hack-check: phase Harden (~11h to cutoff). Weakest: Presentation (no video/rehearsal; Devpost registration unconfirmed, due 23:00). Highest-leverage build fix: wire the disabled "Ask Nemotron" box to POST /request (journey step 4, NVIDIA track). Then: thermal-aware optimizer, /cost from stubs.slot_cost, utilization-vs-price savings story.
+- 21:50 Fawaz's lane redistributed (Loki: prices/cost model; Nandhan: thermal-aware planner + 3D). Task board added.
