@@ -1,0 +1,87 @@
+/* Price insights sidebar module (frontend/ui/price-insights.js). Light theme, page tokens. */
+.pi { font-family: var(--f-ui, 'Barlow', system-ui, sans-serif); color: var(--ink, #17232B); font-variant-numeric: tabular-nums; }
+.pi-sec { padding: 10px 0 12px; border-bottom: 1px solid var(--hair, rgba(23,35,43,.14)); }
+.pi-sec:first-child { padding-top: 0; }
+.pi-h, .pi-dh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pi-t { font-size: 13px; font-weight: 600; color: var(--ink, #17232B); }
+.pi-big { font-family: var(--f-cond, 'Barlow Condensed', sans-serif); font-size: 22px; font-weight: 600; line-height: 1; }
+.pi-unit, .pi-sub, .pi-sub2, .pi-hint { font-size: 11px; color: var(--ink-3, #6B7880); }
+.pi-sub { margin: 2px 0 4px; }
+.pi-sub2 { margin: 6px 0 0; }
+.pi-hint { margin-top: 2px; }
+.pi-chart { width: 100%; position: relative; }
+.pi-chart svg { display: block; overflow: visible; }
+.pi-empty { font-size: 12px; color: var(--ink-3, #6B7880); padding: 18px 0; }
+.pi-read { font-size: 11.5px; color: var(--ink-2, #3E4C55); min-height: 30px; margin-top: 4px; line-height: 1.35; }
+.pi-read b { color: var(--ink, #17232B); font-family: var(--f-cond, sans-serif); font-size: 13px; font-weight: 600; }
+
+/* axes, grid */
+.pi-ax { font-size: 9.5px; fill: var(--ink-3, #6B7880); }
+.pi-grid { stroke: var(--hair, rgba(23,35,43,.14)); stroke-width: 1; shape-rendering: crispEdges; }
+.pi-base { stroke: var(--rule, #B9C3C6); stroke-width: 1; shape-rendering: crispEdges; }
+.pi-hit { fill: transparent; cursor: crosshair; outline: none; }
+.pi-hit:focus-visible { stroke: var(--ink, #17232B); stroke-width: 1; stroke-dasharray: 2 2; }
+
+/* history */
+.pi-band { fill: var(--ink-4, #A7B2B7); fill-opacity: .22; }
+.pi-fczone { fill: var(--sheet-2, #EDF1F1); }
+.pi-fcband { fill: var(--amber, #F2BE3A); fill-opacity: .35; }
+.pi-line { fill: none; stroke: var(--ink, #17232B); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pi-fcline { stroke-dasharray: 3 2.5; stroke: var(--ink-2, #3E4C55); }
+.pi-dot { fill: var(--ink, #17232B); stroke: var(--sheet, #F6F8F8); stroke-width: 2; }
+.pi-hdot { fill: var(--ink, #17232B); stroke: var(--sheet, #F6F8F8); stroke-width: 2; pointer-events: none; }
+.pi-cross { stroke: var(--ink-3, #6B7880); stroke-width: 1; pointer-events: none; shape-rendering: crispEdges; }
+.pi-lab { font-family: var(--f-cond, sans-serif); font-size: 11.5px; font-weight: 600; fill: var(--ink, #17232B); }
+.pi-key { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10.5px; color: var(--ink-2, #3E4C55); margin-top: 4px; }
+.pi-key span { display: inline-flex; align-items: center; gap: 5px; }
+.pi-key i { display: inline-block; width: 14px; height: 8px; border-radius: 2px; }
+.pi-key .k-line { height: 2px; background: var(--ink, #17232B); }
+.pi-key .k-band { background: rgba(167,178,183,.4); }
+.pi-key .k-fc { background: rgba(242,190,58,.45); border-top: 2px dashed var(--ink-2, #3E4C55); height: 6px; }
+
+/* week bars */
+.pi-dbar { cursor: pointer; outline: none; }
+.pi-dhit { fill: transparent; }
+.pi-dfill { fill: var(--ink-4, #A7B2B7); transition: fill .12s; }
+.pi-dbar:hover .pi-dfill { fill: var(--ink-3, #6B7880); }
+.pi-dbar.today .pi-dfill { fill: var(--ink-2, #3E4C55); }
+.pi-dbar.sel .pi-dfill { fill: var(--ink, #17232B); }
+.pi-dbar:focus-visible .pi-dhit { stroke: var(--ink, #17232B); stroke-width: 1.5; rx: 4; }
+.pi-dval { font-family: var(--f-cond, sans-serif); font-size: 11px; font-weight: 500; fill: var(--ink-2, #3E4C55); }
+.pi-dlab { font-size: 10px; fill: var(--ink-3, #6B7880); }
+.pi-dbar.today .pi-dlab, .pi-dbar.sel .pi-dlab { fill: var(--ink, #17232B); font-weight: 600; }
+.pi-dbar.sel .pi-dval { fill: var(--ink, #17232B); font-weight: 600; }
+
+/* day detail */
+.pi-day { margin-top: 8px; padding: 8px 10px 10px; background: var(--sheet, #F6F8F8); border: 1px solid var(--hair, rgba(23,35,43,.14)); border-radius: 6px; }
+.pi-x { border: 0; background: transparent; font-size: 18px; line-height: 1; color: var(--ink-3, #6B7880); cursor: pointer; padding: 0 2px; border-radius: 3px; }
+.pi-x:hover, .pi-x:focus-visible { color: var(--ink, #17232B); background: var(--sheet-2, #EDF1F1); outline: none; }
+.pi-formula { font-size: 11.5px; color: var(--ink-2, #3E4C55); margin: 3px 0 6px; line-height: 1.35; }
+.pi-formula b { font-family: var(--f-cond, sans-serif); font-size: 13px; color: var(--ink, #17232B); }
+.pi-avg { stroke: var(--ink-3, #6B7880); stroke-width: 1; stroke-dasharray: 3 3; shape-rendering: crispEdges; }
+.pi-hline { fill: none; stroke: var(--ink-2, #3E4C55); stroke-width: 1.5; stroke-linejoin: round; }
+.pi-hdot2 { fill: var(--ink, #17232B); stroke: var(--sheet, #F6F8F8); stroke-width: 1; }
+.pi-hcol { fill: transparent; }
+.pi-hcol.on { fill: var(--sheet-2, #EDF1F1); }
+.pi-day .pi-hcol.on { fill: rgba(23,35,43,.07); }
+.pi-hdot2.on { r: 4; }
+.pi-sb-ours { fill: var(--ours, #0B7A84); }
+.pi-sb-asap { fill: var(--asap, #EA5B1F); }
+.pi-hread { min-height: 32px; }
+.sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.sw-ours { background: var(--ours, #0B7A84); }
+.sw-asap { background: var(--asap, #EA5B1F); }
+.pi-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair, rgba(23,35,43,.14)); font-size: 11.5px; color: var(--ink-2, #3E4C55); }
+.pi-totals div { display: flex; align-items: center; }
+.pi-totals b { margin-left: auto; font-family: var(--f-cond, sans-serif); font-size: 16px; font-weight: 600; color: var(--ink, #17232B); }
+.pi-note { font-size: 10.5px; color: var(--ink-3, #6B7880); margin: 6px 0 0; line-height: 1.35; }
+
+.pi-src { font-size: 10.5px; color: var(--ink-3, #6B7880); margin: 8px 0 0; line-height: 1.4; }
+.pi-src a { color: var(--ink-2, #3E4C55); text-decoration: underline; text-decoration-color: var(--rule, #B9C3C6); text-underline-offset: 2px; }
+.pi-src a:hover { color: var(--ink, #17232B); }
+
+/* hourly cost bars (from $0) */
+.pi-rbar { fill: #9AA7AD; transition: fill .15s; }
+.pi-rbar.busy { fill: var(--ours); }
+.pi-hcol.on + .pi-rbar, .pi-rbar.on { fill: var(--ink); }
+.pi-blab { font: 600 10px var(--f-ui); fill: var(--ink-2); font-variant-numeric: tabular-nums; }

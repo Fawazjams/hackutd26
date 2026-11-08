@@ -63,6 +63,35 @@ const rackCache = new Map();
 const equipCache = new Map();
 const zoneAlertCache = new Map();
 let priceChart = null, gantt = null;
+let priceInsights = null;   // ui/price-insights.js when it loads; else the basic createPriceChart
+
+// Load the price-insights module once; any failure falls back to the basic bar chart.
+let priceInsightsLoad = null;
+function loadPriceInsights() {
+  priceInsightsLoad ||= import('./ui/price-insights.js')
+    .then((m) => {
+      const pi = m.initPriceInsights($('price-insights'), { getPlans: () => S.d?.plans, getMode: () => S.mode });
+      if (!pi) throw new Error('initPriceInsights returned nothing');
+      priceInsights = pi;
+      $('price-credit').hidden = true;   // the module carries its own data credit
+    })
+    .catch((e) => { console.warn('[price-insights] using the basic price chart:', e); priceInsights = null; });
+  return priceInsightsLoad;
+}
+
+function renderPrices(raw) {
+  if (priceInsights) {
+    try {
+      priceInsights.refresh?.();
+      if (BOOT.day != null) { const d = BOOT.day; BOOT.day = null; setTimeout(() => { try { priceInsights?.openDay?.(d); } catch (e) { console.warn('[price-insights] openDay failed:', e); } }, 0); }
+      return;
+    } catch (e) { console.warn('[price-insights] refresh failed, using the basic price chart:', e); priceInsights = null; }
+  }
+  const host = $('price-insights');
+  host.classList.add('price-chart');
+  $('price-credit').hidden = false;
+  priceChart = createPriceChart(host, raw.prices);
+}
 const firedIncidents = new Set();   // each alarm fires by itself once per page load
 const sessionTasks = new Map();     // jobs Nemotron added this session: id -> { task, source }
 
@@ -204,8 +233,9 @@ function applyRaw(raw, at = null) {
   S.beatLog = []; S.hold = 0; hideBeat();
   $('offline-chip').hidden = !raw.offline;
   buildLadder();
-  priceChart = createPriceChart($('price-chart'), raw.prices);
+  renderPrices(raw);
   gantt = createGantt($('gantt'), S.d.plans, raw.backlog.map(t => t.id));
+  ganttW = $('gantt').clientWidth;
   gantt.select(S.selected);
   if (at == null) restart();
   else {
@@ -214,6 +244,7 @@ function applyRaw(raw, at = null) {
     setPlaying(true);
   }
   refreshIncidents();
+  refreshView();
 }
 
 // GET /incidents after every load; offline or an older backend gives [] (no alarms, no button).
@@ -1167,7 +1198,11 @@ function render(now) {
   updateTicker();
   updateLadder();
   updateNewJob();
-  priceChart?.setToday(Math.min(6, Math.floor(S.t / 24)));
+  const today = Math.min(6, Math.floor(S.t / 24));
+  if (priceInsights) {
+    try { priceInsights.setToday(today); }
+    catch (e) { console.warn('[price-insights] setToday failed, using the basic price chart:', e); priceInsights = null; if (S.raw) renderPrices(S.raw); }
+  } else priceChart?.setToday(today);
   gantt?.setHour(S.t);
   const scrub = $('scrub');
   if (document.activeElement !== scrub || !S.playing) scrub.value = S.t.toFixed(2);
@@ -1179,7 +1214,122 @@ function render(now) {
 // ---------------------------------------------------------------- boot
 // Optional deep-link for rehearsals and screenshots: ?mode=private&show=asap&t=36&speed=4&paused=1
 const Q = new URLSearchParams(location.search);
-const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
+const BOOT = {
+  t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1',
+  day: /^[0-6]$/.test(Q.get('day') || '') ? Number(Q.get('day')) : null,   // ?day=N opens that day's price detail
+};
+
+// ---------------------------------------------------------------- views (#hall / #schedule / #prices / #report)
+const VIEWS = ['home', 'details'];
+const ROOT = { home: 'view-hall', details: 'view-details' };
+const SECTION = { schedule: 'view-schedule', prices: 'view-prices', report: 'view-report' };
+let curView = 'home';
+function viewFromHash() {
+  const h = (location.hash || '').replace('#', '');
+  if (h === 'hall') return 'home';
+  if (SECTION[h]) return 'details';
+  return VIEWS.includes(h) ? h : null;
+}
+function setView(name, { focus = false } = {}) {
+  if (!VIEWS.includes(name)) name = 'home';
+  curView = name;
+  document.body.classList.toggle('view-hall', name === 'home');
+  for (const v of VIEWS) {
+    document.body.classList.toggle(`view-${v}`, v === name);
+    const root = $(ROOT[v]);
+    if (root) { root.classList.toggle('off', v !== name); root.setAttribute('aria-hidden', String(v !== name)); }
+    const tab = $(`nav-${v}`);
+    if (tab) {
+      tab.setAttribute('aria-selected', String(v === name));
+      if (v === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
+      tab.tabIndex = v === name ? 0 : -1;
+      if (v === name && focus) tab.focus();
+    }
+  }
+  const help = $('help'); if (help) help.open = false;
+  refreshView();
+  try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
+  // #schedule / #prices / #report deep links scroll to that part of Details
+  const sec = SECTION[(location.hash || '').replace('#', '')];
+  if (name === 'details' && sec) requestAnimationFrame(() => $(sec)?.scrollIntoView({ block: 'start' }));
+}
+// Render whichever view is showing; called on view change and whenever plans change.
+let scheduleMod = null, reportMod = null;
+function refreshView() {
+  if (!S.d || !S.raw) return;
+  if (curView === 'details') {
+    (scheduleMod ||= import('./ui/schedule-view.js')).then((m) => {
+      if (typeof m.renderSchedule !== 'function') throw new Error('renderSchedule missing');
+      m.renderSchedule($('schedule-host'), { plans: S.d.plans, backlog: S.raw.backlog, mode: S.mode, now: S.t });
+      $('schedule-host').hidden = false; $('schedule-fallback').hidden = true;
+    }).catch((e) => {
+      console.warn('[schedule-view] using the jobs list:', e);
+      scheduleMod = null;
+      $('schedule-host').hidden = true; $('schedule-fallback').hidden = false;
+    });
+  }
+  if (curView === 'details') {
+    try { priceInsights?.refresh?.(); } catch (e) { console.warn('[price-insights] refresh failed:', e); }
+  }
+  if (curView === 'details') {
+    (reportMod ||= import('./ui/report.js')).then((m) => {
+      const host = $('report-host');
+      const args = { plans: S.d.plans, backlog: S.raw.backlog, prices: S.raw.prices, mode: S.mode };
+      if (typeof m.renderReport === 'function') { m.renderReport(host, args); return; }
+      host.innerHTML = '<button class="btn-dark" type="button">Open week report</button>';
+      host.firstChild.addEventListener('click', () => m.openReport?.(args));
+    }).catch((e) => { console.warn('[report] not available yet:', e); reportMod = null; $('report-host').textContent = 'The report is not available yet.'; });
+  }
+}
+function wireViews() {
+  const list = document.querySelector('.tn-links');
+  const tabs = [...list.querySelectorAll('[role="tab"]')];
+  list.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    let j = null;
+    if (e.key === 'ArrowRight') j = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = tabs.length - 1;
+    if (j == null) return;
+    e.preventDefault(); e.stopPropagation();
+    history.replaceState(null, '', `${location.search}#${tabs[j].dataset.view}`);
+    setView(tabs[j].dataset.view, { focus: true });
+  });
+  window.addEventListener('hashchange', () => setView(viewFromHash() || 'home'));
+  let start = viewFromHash();
+  if (!start) {
+    start = BOOT.day != null ? 'details' : 'home';
+    history.replaceState(null, '', `${location.search}#${start}`);
+  }
+  setView(start);
+}
+function wireReport() {
+  const b = $('btn-report');
+  if (!b) return;
+  b.addEventListener('click', () => {
+    try {
+      if (!S.d || !S.raw) return;
+      import('./ui/report.js')
+        .then(m => m.openReport({ plans: S.d.plans, backlog: S.raw.backlog, prices: S.raw.prices, mode: S.mode }))
+        .catch(e => console.warn('[report] not available yet:', e));
+    } catch (e) { console.warn('[report] failed:', e); }
+  });
+}
+let ganttW = 0, ganttTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(ganttTimer);
+  ganttTimer = setTimeout(() => {
+    const host = $('gantt');
+    if (!host || !S.d || !S.raw || host.clientWidth === ganttW) return;
+    ganttW = host.clientWidth;
+    try {
+      gantt = createGantt(host, S.d.plans, S.raw.backlog.map(t => t.id));
+      gantt.select(S.selected); gantt.setHour(S.t);
+    } catch (e) { console.warn('[gantt] resize failed:', e); }
+  }, 120);
+});
 
 (function boot() {
   (window.__pendingErrors || []).forEach(m => window.__showDevError?.(m));
@@ -1187,6 +1337,8 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   if (Q.get('show') === 'asap') setShow('asap');
   if (['1', '4', '16'].includes(Q.get('speed'))) { S.speed = Number(Q.get('speed')); setSeg('seg-speed', Q.get('speed')); }
   wireControls();
+  wireViews();
+  wireReport();
   pushView();
   // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)
   initHall().then(() => { for (let i = 0; i < (Number(Q.get('turn')) || 0) % 4; i++) call('rotate', +1); });
@@ -1201,6 +1353,7 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
     .catch(e => console.warn('[exposure] card unavailable:', e));
   window.addEventListener('agent:step', onAgentStep);
   window.addEventListener('agent:plan', onAgentPlan);
-  loadMode(S.mode);
+  // price insights first (a local module, quick) so the first load renders into it
+  loadPriceInsights().finally(() => loadMode(S.mode));
   requestAnimationFrame(frame);
 })();

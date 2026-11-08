@@ -1,0 +1,130 @@
+/* Week report overlay: a full-screen engineering sheet. Uses tokens from styles.css. */
+.rp-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--vellum, #E8ECEC);
+  color: var(--ink, #17232B);
+  overflow: auto;
+  font: 400 13px/1.45 var(--f-ui, 'Barlow', system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+.rp-sheet {
+  max-width: 1320px; margin: 24px auto 40px; padding: 24px 28px 28px;
+  background: var(--sheet, #F6F8F8);
+  border: 1px solid var(--rule, #B9C3C6);
+  outline: 1px solid var(--hair, rgba(23,35,43,.14)); outline-offset: 4px;
+  border-radius: var(--r, 4px);
+}
+.rp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  padding-bottom: 16px; border-bottom: 2px solid var(--ink); margin-bottom: 18px; }
+.rp-kicker { font: 500 12px var(--f-cond); color: var(--ink-3); letter-spacing: .02em; }
+.rp-head h1 { margin: 2px 0 4px; font: 700 30px/1.1 var(--f-cond); letter-spacing: -.005em; }
+.rp-sub { color: var(--ink-2); max-width: 70ch; }
+.rp-actions { display: flex; gap: 8px; align-items: center; }
+.rp-btn { border: 1px solid var(--ink); background: var(--sheet); padding: 6px 14px; border-radius: var(--r);
+  font: 600 13px var(--f-cond); }
+.rp-btn:hover { background: var(--ink); color: var(--sheet); }
+.rp-close { width: 34px; height: 34px; border: 1px solid var(--rule); background: transparent; border-radius: var(--r);
+  font-size: 22px; line-height: 1; color: var(--ink-2); }
+.rp-close:hover { border-color: var(--ink); color: var(--ink); }
+
+.rp-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
+  border: 1px solid var(--rule); border-radius: var(--r); margin-bottom: 18px; background: var(--sheet); }
+.rp-kpi { padding: 12px 14px 10px; border-left: 1px solid var(--hair); display: flex; flex-direction: column; min-width: 0; }
+.rp-kpi:first-child { border-left: 0; }
+.rp-kpi-l { font: 600 13px var(--f-cond); color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.k-ours .rp-kpi-l::before, .k-asap .rp-kpi-l::before { content: ''; width: 10px; height: 3px; border-radius: 2px; background: var(--ours); }
+.k-asap .rp-kpi-l::before { background: var(--asap); }
+.rp-kpi-v { font: 600 26px/1.15 var(--f-cond); margin-top: 2px; white-space: nowrap; }
+.rp-vs { font-size: 15px; color: var(--ink-3); font-weight: 500; }
+.rp-kpi-s { color: var(--ink-3); font-size: 12px; min-height: 17px; }
+.rp-spark { width: 100%; height: 28px; margin-top: 8px; display: block; }
+
+.rp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.rp-card { margin: 0; border: 1px solid var(--rule); border-radius: var(--r); background: var(--sheet); padding: 14px 16px; }
+.rp-wide { grid-column: 1 / -1; }
+.rp-card h2 { margin: 0; font: 600 17px var(--f-cond); }
+.rp-card figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.rp-legend { display: flex; gap: 14px; color: var(--ink-2); font-size: 12px; }
+.rp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.rp-legend .sw { margin-right: 0; }
+.sw-ours { background: var(--ours); }
+.sw-asap { background: var(--asap); }
+.sw-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--sheet); border: 2px solid var(--asap); }
+
+.rp-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.rp-wide .rp-chart { aspect-ratio: 1220 / 320; }
+.rp-grid2 > .rp-card:not(.rp-wide) .rp-chart { aspect-ratio: 600 / 260; }
+.rp-grid { stroke: var(--hair-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.rp-grid-v { stroke-dasharray: 2 3; }
+.rp-base { stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.rp-axis { fill: var(--ink-3); font: 500 11px var(--f-ui); }
+.rp-axis-x { fill: var(--ink-2); }
+.rp-line { fill: none; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.rp-oh { fill: var(--sheet); stroke: var(--asap); stroke-width: 2; vector-effect: non-scaling-stroke; cursor: default; }
+.rp-oh:hover { fill: var(--asap); }
+.rp-endlbl { fill: var(--ink); font: 600 12px var(--f-cond); paint-order: stroke; stroke: var(--sheet); stroke-width: 3px; }
+.rp-cross { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+
+.rp-tablecard h2 { margin-bottom: 8px; }
+.rp-tablewrap { overflow-x: auto; }
+.rp-table { width: 100%; border-collapse: collapse; }
+.rp-table th { text-align: left; font: 600 13px var(--f-cond); color: var(--ink-2); padding: 6px 10px; border-bottom: 1.5px solid var(--ink); white-space: nowrap; }
+.rp-table td { padding: 7px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; white-space: nowrap; }
+.rp-table tbody tr:hover td { background: var(--sheet-2); }
+.rp-table .n { text-align: right; }
+.rp-job { font-weight: 600; display: block; }
+.rp-meta { color: var(--ink-3); font-size: 12px; }
+.rp-table .good { color: var(--ours-ink); font-weight: 600; }
+.rp-table .bad { color: var(--asap-ink); font-weight: 600; }
+.rp-table tfoot td { border-top: 1.5px solid var(--ink); border-bottom: 0; font-weight: 700; padding-top: 9px; }
+.rp-oh-row td { color: var(--ink-2); }
+
+.rp-note { margin-top: 18px; color: var(--ink-2); }
+.rp-note h2 { margin-bottom: 6px; color: var(--ink); }
+.rp-note p { margin: 0 0 6px; max-width: 110ch; }
+
+.rp-tip { position: absolute; z-index: 5; pointer-events: none; background: var(--sheet); border: 1px solid var(--ink);
+  border-radius: var(--r); padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(23,35,43,.15); min-width: 150px; max-width: 260px; }
+.rp-tip b { display: block; font: 600 13px var(--f-cond); margin-bottom: 2px; }
+
+@media (max-width: 1100px) { .rp-kpis { grid-template-columns: repeat(3, 1fr); } .rp-kpi:nth-child(4) { border-left: 0; } .rp-kpi:nth-child(n+4) { border-top: 1px solid var(--hair); } }
+@media (max-width: 760px) {
+  .rp-sheet { margin: 0; padding: 16px; border: 0; outline: 0; }
+  .rp-kpis { grid-template-columns: repeat(2, 1fr); }
+  .rp-kpi { border-left: 0; border-top: 1px solid var(--hair); }
+  .rp-grid2 { grid-template-columns: 1fr; }
+}
+
+/* Inline mode: the same dashboard living inside a page section. */
+.rp-inline { position: relative; color: var(--ink, #17232B);
+  font: 400 14px/1.5 var(--f-ui, 'Barlow', system-ui, sans-serif); font-variant-numeric: tabular-nums; }
+.rp-inline .rp-sheet { max-width: none; margin: 0; padding: 8px 0 0; background: transparent; border: 0; outline: 0; border-radius: 0; }
+.rp-head-inline { border-bottom: 1px solid var(--rule, #B9C3C6); padding-bottom: 22px; margin-bottom: 24px; }
+.rp-head-inline h1 { font: 700 40px/1.1 var(--f-cond, inherit); margin: 0 0 10px; letter-spacing: -.01em; }
+.rp-summary { margin: 0 0 6px; font-size: 19px; line-height: 1.45; color: var(--ink, #17232B); max-width: 80ch; }
+.rp-inline .rp-sub { font-size: 13px; color: var(--ink-3); }
+.rp-inline .rp-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 24px; }
+.rp-inline .rp-kpi { padding: 16px 20px 14px; }
+.rp-inline .rp-kpi:nth-child(4) { border-left: 0; }
+.rp-inline .rp-kpi:nth-child(n+4) { border-top: 1px solid var(--hair); }
+.rp-inline .rp-kpi-v { font-size: 30px; }
+.rp-inline .rp-grid2 { gap: 24px; margin-bottom: 24px; }
+.rp-inline .rp-card { padding: 18px 20px; }
+@media (min-width: 1500px) { .rp-inline .rp-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .rp-inline .rp-kpi:nth-child(4) { border-left: 1px solid var(--hair); } .rp-inline .rp-kpi:nth-child(n+4) { border-top: 0; } }
+
+@media print {
+  body.rp-printing-inline * { visibility: hidden !important; }
+  body.rp-printing-inline .rp-print-target, body.rp-printing-inline .rp-print-target * { visibility: visible !important; }
+  body.rp-printing-inline .rp-print-target { position: absolute; left: 0; top: 0; width: 100%; background: #fff; }
+  .rp-inline .rp-actions { display: none !important; }
+
+  body.rp-printing > *:not(.rp-overlay) { display: none !important; }
+  body.rp-printing { overflow: visible !important; background: #fff !important; }
+  .rp-overlay { position: static; overflow: visible; background: #fff; }
+  .rp-sheet { margin: 0; max-width: none; border: 0; outline: 0; padding: 0; background: #fff; }
+  .rp-actions, .rp-tip { display: none !important; }
+  .rp-card, .rp-kpis { break-inside: avoid; background: #fff; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
