@@ -244,6 +244,7 @@ function applyRaw(raw, at = null) {
     setPlaying(true);
   }
   refreshIncidents();
+  refreshView();
 }
 
 // GET /incidents after every load; offline or an older backend gives [] (no alarms, no button).
@@ -1217,27 +1218,71 @@ const BOOT = {
   day: /^[0-6]$/.test(Q.get('day') || '') ? Number(Q.get('day')) : null,   // ?day=N opens that day's price detail
 };
 
-// ---------------------------------------------------------------- panel tabs, report, timeline resize
-const TAB_KEY = 'dtp.tab';
-function setTab(name, { save = true, focus = false } = {}) {
-  const tabs = document.querySelectorAll('.tabs [role="tab"]');
-  if (![...tabs].some(t => t.dataset.tab === name)) name = 'plan';
-  for (const t of tabs) {
-    const on = t.dataset.tab === name;
-    t.setAttribute('aria-selected', String(on));
-    t.tabIndex = on ? 0 : -1;
-    const panel = $(t.getAttribute('aria-controls'));
-    if (panel) { panel.classList.toggle('off', !on); panel.setAttribute('aria-hidden', String(!on)); }
-    if (on && focus) t.focus();
-  }
-  if (save) { try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* storage blocked */ } }
-  try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
+// ---------------------------------------------------------------- views (#hall / #schedule / #prices / #report)
+const VIEWS = ['home', 'details'];
+const ROOT = { home: 'view-hall', details: 'view-details' };
+const SECTION = { schedule: 'view-schedule', prices: 'view-prices', report: 'view-report' };
+let curView = 'home';
+function viewFromHash() {
+  const h = (location.hash || '').replace('#', '');
+  if (h === 'hall') return 'home';
+  if (SECTION[h]) return 'details';
+  return VIEWS.includes(h) ? h : null;
 }
-function wireTabs() {
-  const list = document.querySelector('.tabs');
-  if (!list) return;
+function setView(name, { focus = false } = {}) {
+  if (!VIEWS.includes(name)) name = 'home';
+  curView = name;
+  document.body.classList.toggle('view-hall', name === 'home');
+  for (const v of VIEWS) {
+    document.body.classList.toggle(`view-${v}`, v === name);
+    const root = $(ROOT[v]);
+    if (root) { root.classList.toggle('off', v !== name); root.setAttribute('aria-hidden', String(v !== name)); }
+    const tab = $(`nav-${v}`);
+    if (tab) {
+      tab.setAttribute('aria-selected', String(v === name));
+      if (v === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
+      tab.tabIndex = v === name ? 0 : -1;
+      if (v === name && focus) tab.focus();
+    }
+  }
+  const help = $('help'); if (help) help.open = false;
+  refreshView();
+  try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
+  // #schedule / #prices / #report deep links scroll to that part of Details
+  const sec = SECTION[(location.hash || '').replace('#', '')];
+  if (name === 'details' && sec) requestAnimationFrame(() => $(sec)?.scrollIntoView({ block: 'start' }));
+}
+// Render whichever view is showing; called on view change and whenever plans change.
+let scheduleMod = null, reportMod = null;
+function refreshView() {
+  if (!S.d || !S.raw) return;
+  if (curView === 'details') {
+    (scheduleMod ||= import('./ui/schedule-view.js')).then((m) => {
+      if (typeof m.renderSchedule !== 'function') throw new Error('renderSchedule missing');
+      m.renderSchedule($('schedule-host'), { plans: S.d.plans, backlog: S.raw.backlog, mode: S.mode, now: S.t });
+      $('schedule-host').hidden = false; $('schedule-fallback').hidden = true;
+    }).catch((e) => {
+      console.warn('[schedule-view] using the jobs list:', e);
+      scheduleMod = null;
+      $('schedule-host').hidden = true; $('schedule-fallback').hidden = false;
+    });
+  }
+  if (curView === 'details') {
+    try { priceInsights?.refresh?.(); } catch (e) { console.warn('[price-insights] refresh failed:', e); }
+  }
+  if (curView === 'details') {
+    (reportMod ||= import('./ui/report.js')).then((m) => {
+      const host = $('report-host');
+      const args = { plans: S.d.plans, backlog: S.raw.backlog, prices: S.raw.prices, mode: S.mode };
+      if (typeof m.renderReport === 'function') { m.renderReport(host, args); return; }
+      host.innerHTML = '<button class="btn-dark" type="button">Open week report</button>';
+      host.firstChild.addEventListener('click', () => m.openReport?.(args));
+    }).catch((e) => { console.warn('[report] not available yet:', e); reportMod = null; $('report-host').textContent = 'The report is not available yet.'; });
+  }
+}
+function wireViews() {
+  const list = document.querySelector('.tn-links');
   const tabs = [...list.querySelectorAll('[role="tab"]')];
-  list.addEventListener('click', (e) => { const t = e.target.closest('[role="tab"]'); if (t) setTab(t.dataset.tab); });
   list.addEventListener('keydown', (e) => {
     const i = tabs.indexOf(document.activeElement);
     if (i < 0) return;
@@ -1248,15 +1293,16 @@ function wireTabs() {
     else if (e.key === 'End') j = tabs.length - 1;
     if (j == null) return;
     e.preventDefault(); e.stopPropagation();
-    setTab(tabs[j].dataset.tab, { focus: true });
+    history.replaceState(null, '', `${location.search}#${tabs[j].dataset.view}`);
+    setView(tabs[j].dataset.view, { focus: true });
   });
-  let saved = null;
-  try { saved = localStorage.getItem(TAB_KEY); } catch (e) { saved = null; }
-  setTab(BOOT.day != null ? 'prices' : (saved || 'plan'), { save: BOOT.day != null });
-  // a Nemotron run or an alarm: show its work in the Agent tab
-  window.addEventListener('agent:step', () => { if (document.querySelector('.tabs [aria-selected="true"]')?.dataset.tab !== 'agent') setTab('agent', { save: false }); });
-  document.addEventListener('click', (e) => { if (e.target.closest?.('.ap-alarm-btn, .ap-btn, .ap-chip')) setTab('agent', { save: false }); }, true);
-  $('panel').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList?.contains('ask')) setTab('agent', { save: false }); }, true);
+  window.addEventListener('hashchange', () => setView(viewFromHash() || 'home'));
+  let start = viewFromHash();
+  if (!start) {
+    start = BOOT.day != null ? 'details' : 'home';
+    history.replaceState(null, '', `${location.search}#${start}`);
+  }
+  setView(start);
 }
 function wireReport() {
   const b = $('btn-report');
@@ -1290,7 +1336,7 @@ window.addEventListener('resize', () => {
   if (Q.get('show') === 'asap') setShow('asap');
   if (['1', '4', '16'].includes(Q.get('speed'))) { S.speed = Number(Q.get('speed')); setSeg('seg-speed', Q.get('speed')); }
   wireControls();
-  wireTabs();
+  wireViews();
   wireReport();
   pushView();
   // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)

@@ -96,7 +96,30 @@
   .rp-grid2 { grid-template-columns: 1fr; }
 }
 
+/* Inline mode: the same dashboard living inside a page section. */
+.rp-inline { position: relative; color: var(--ink, #17232B);
+  font: 400 14px/1.5 var(--f-ui, 'Barlow', system-ui, sans-serif); font-variant-numeric: tabular-nums; }
+.rp-inline .rp-sheet { max-width: none; margin: 0; padding: 8px 0 0; background: transparent; border: 0; outline: 0; border-radius: 0; }
+.rp-head-inline { border-bottom: 1px solid var(--rule, #B9C3C6); padding-bottom: 22px; margin-bottom: 24px; }
+.rp-head-inline h1 { font: 700 40px/1.1 var(--f-cond, inherit); margin: 0 0 10px; letter-spacing: -.01em; }
+.rp-summary { margin: 0 0 6px; font-size: 19px; line-height: 1.45; color: var(--ink, #17232B); max-width: 80ch; }
+.rp-inline .rp-sub { font-size: 13px; color: var(--ink-3); }
+.rp-inline .rp-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 24px; }
+.rp-inline .rp-kpi { padding: 16px 20px 14px; }
+.rp-inline .rp-kpi:nth-child(4) { border-left: 0; }
+.rp-inline .rp-kpi:nth-child(n+4) { border-top: 1px solid var(--hair); }
+.rp-inline .rp-kpi-v { font-size: 30px; }
+.rp-inline .rp-grid2 { gap: 24px; margin-bottom: 24px; }
+.rp-inline .rp-card { padding: 18px 20px; }
+@media (min-width: 1500px) { .rp-inline .rp-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .rp-inline .rp-kpi:nth-child(4) { border-left: 1px solid var(--hair); } .rp-inline .rp-kpi:nth-child(n+4) { border-top: 0; } }
+
 @media print {
+  body.rp-printing-inline * { visibility: hidden !important; }
+  body.rp-printing-inline .rp-print-target, body.rp-printing-inline .rp-print-target * { visibility: visible !important; }
+  body.rp-printing-inline .rp-print-target { position: absolute; left: 0; top: 0; width: 100%; background: #fff; }
+  .rp-inline .rp-actions { display: none !important; }
+
   body.rp-printing > *:not(.rp-overlay) { display: none !important; }
   body.rp-printing { overflow: visible !important; background: #fff !important; }
   .rp-overlay { position: static; overflow: visible; background: #fff; }

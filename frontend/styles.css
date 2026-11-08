@@ -700,3 +700,190 @@ body.mode-cloud .private-only, body.mode-private .cloud-only { display: none; }
 /* merge: our "Explain key moments" switch lives in the transport bar under the scrubber */
 :root { --tp-h: 140px; }
 .transport .explain-row { margin: 2px 0 0 23px; font-size: 12px; }
+
+/* =====================================================================
+   App shell: top nav + four views (#hall, #schedule, #prices, #report).
+   Each view has one job. The hall stays the big picture.
+   ===================================================================== */
+:root { --nav-h: 60px; --agent-w: 340px; --stats-h: 112px; --tp-h: 118px; }
+
+.topnav {
+  position: fixed; z-index: 20; top: 0; left: 0; right: 0; height: var(--nav-h);
+  display: flex; align-items: center; gap: 28px; padding: 0 var(--gutter) 0 28px;
+  background: var(--sheet); border-bottom: 1px solid var(--rule);
+}
+.tn-brand { flex: none; font: 700 28px/1 var(--f-cond); letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.tn-links { display: flex; gap: 4px; height: 100%; }
+.tn-links a {
+  display: inline-flex; align-items: center; height: 100%; padding: 0 14px;
+  font: 600 15px/1 var(--f-ui); color: var(--ink-3); text-decoration: none;
+  border-bottom: 3px solid transparent; border-top: 3px solid transparent;
+}
+.tn-links a:hover { color: var(--ink); }
+.tn-links a[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ours); }
+.tn-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.tn-right .chip { margin-top: 0; }
+.tn-mode .seg { margin: 0; width: 230px; }
+.tn-mode .seg button { height: 32px; }
+
+/* "?" help popover: keyboard + view settings */
+.help { position: relative; }
+.help summary {
+  list-style: none; cursor: pointer; display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--rule); background: var(--sheet);
+  font: 700 15px/1 var(--f-ui); color: var(--ink-2);
+}
+.help summary::-webkit-details-marker { display: none; }
+.help[open] summary { border-color: var(--ink); color: var(--ink); }
+.help-body {
+  position: absolute; right: 0; top: 42px; width: 300px; padding: 14px 16px 16px;
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r);
+  box-shadow: 0 10px 30px rgba(23, 35, 43, 0.14);
+}
+.help-body h3 { margin: 12px 0 8px; font: 600 13px/1.2 var(--f-ui); color: var(--ink); }
+.help-body h3:first-child { margin-top: 0; }
+.help-body .keys { position: static; width: auto; display: grid; gap: 6px; }
+.help-body .sec-view { border: 0; padding: 0; }
+.help-body .sec-view summary { display: none; }
+.help-body .view-body { padding: 0; }
+
+/* views: hidden ones stay laid out (charts can measure) but invisible */
+.view.off { visibility: hidden; pointer-events: none; }
+.view.page.off { height: 0; overflow: hidden; }
+body:not(.view-hall) #stage { visibility: hidden; }
+
+/* ---------- Hall view ---------- */
+.view-hall-root .ticker, .view-hall-root .bt-log, .sb-clockline .sb-clock { display: none !important; }
+#stage {
+  top: calc(var(--nav-h) + var(--stats-h) + var(--gutter));
+  left: 0; right: calc(var(--agent-w) + var(--gutter) * 2);
+  bottom: calc(var(--tp-h) + var(--gutter));
+}
+.stats {
+  position: fixed; z-index: 5;
+  top: calc(var(--nav-h) + var(--gutter)); left: var(--gutter);
+  right: calc(var(--agent-w) + var(--gutter) * 2); height: var(--stats-h);
+}
+.stats .scoreboard {
+  margin: 0; border: 0; height: 100%;
+  display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 14px;
+}
+.sb-card {
+  display: flex; flex-direction: column; justify-content: center; gap: 6px; min-width: 0;
+  padding: 14px 18px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px;
+  border-top: 4px solid var(--c, var(--ink));
+}
+.stats .sb-row { grid-template-columns: none; }
+.stats .sb-name { font-size: 15px; }
+.stats .sb-money { font-size: 40px; }
+.stats .sb-bar { display: none; }
+.stats .sb-meta { gap: 14px; }
+.stats .sb-foot { --c: var(--ours); padding: 14px 18px; flex-direction: row; align-items: center; gap: 16px; background: color-mix(in srgb, var(--ours) 7%, var(--sheet)); }
+.stats .sb-saved { flex: none; }
+.stats .sb-saved small { font-size: 15px; font-weight: 600; color: var(--ours-ink); }
+.stats .sb-saved b { font-size: 52px; }
+.stats .sb-delta { display: none; }
+.stats .sb-clockline { flex: 1; min-width: 0; justify-content: flex-end; }
+.stats .sb-status { white-space: normal; text-align: right; font-size: 13px; }
+
+.transport {
+  top: auto; bottom: var(--gutter); left: var(--gutter);
+  right: calc(var(--agent-w) + var(--gutter) * 2); height: var(--tp-h);
+  padding: 10px 16px;
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px;
+}
+.transport .gantt { height: 40px; }
+.transport .explain-row { display: none; }
+.tp-show { margin-left: auto; }
+.tp-show .seg { margin: 0; width: 220px; }
+.tp-show .seg button { height: 32px; }
+.tp-legend { display: none; }
+
+.stage-top {
+  top: calc(var(--nav-h) + var(--stats-h) + var(--gutter) * 2);
+  left: calc((100vw - var(--agent-w) - var(--gutter)) / 2);
+  width: min(440px, calc(100vw - var(--agent-w) - var(--gutter) * 6));
+}
+
+.agent-card {
+  top: calc(var(--nav-h) + var(--gutter)); bottom: var(--gutter); right: var(--gutter);
+  width: var(--agent-w); max-height: none; border-radius: 6px;
+}
+.agent-card .sec-ask { background: var(--sheet); padding: 18px; }
+.agent-card .sec-label { font: 700 24px/1.1 var(--f-cond); color: var(--ink); margin-bottom: 10px; }
+.agent-card .pill-phase { display: none; }
+.panel-toggle { display: none !important; }
+
+/* ---------- Page views (schedule, prices, report) ---------- */
+.view.page {
+  position: fixed; z-index: 8; top: var(--nav-h); left: 0; right: 0; bottom: 0;
+  overflow-y: auto; background: var(--vellum);
+  padding: 40px max(var(--gutter), calc((100vw - 1180px) / 2)) 64px;
+}
+.page-head { margin-bottom: 24px; }
+.page-head h1 { margin: 0; font: 700 52px/0.95 var(--f-cond); letter-spacing: -0.012em; color: var(--ink); }
+.page-head p { margin: 12px 0 0; max-width: 680px; font-size: 17px; line-height: 1.5; color: var(--ink-2); }
+.page-card {
+  margin-top: 18px; padding: 24px 28px; background: var(--sheet);
+  border: 1px solid var(--rule); border-radius: 8px;
+}
+.page-card h2 { margin: 0 0 12px; font: 700 28px/1.1 var(--f-cond); color: var(--ink); }
+.page-card .sec { padding: 0; border: 0; }
+#schedule-fallback .sec-jobs .ladder { max-height: none; }
+#schedule-fallback .ladder li { padding: 10px 10px 10px 16px; }
+#schedule-fallback .ladder .nm { font-size: 15px; }
+.view.page .howto { position: static; width: auto; max-width: none; }
+.view.page .howto-body { padding: 0; max-height: none; overflow: visible; font-size: 15px; }
+.view.page .formula { font-size: 15px; padding: 14px 16px; }
+
+@media (max-width: 1000px) {
+  :root { --agent-w: 0px; }
+  .agent-card { position: static; width: auto; }
+  .tn-links a { padding: 0 8px; }
+  .tn-mode { display: none; }
+  .stats .scoreboard { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .stats .sb-money { font-size: 26px; }
+  .stats .sb-saved b { font-size: 32px; }
+  .transport { left: var(--gutter); right: var(--gutter); }
+}
+/* the schedule and report modules bring their own cards and headings */
+#schedule-host, #report-host { padding: 0; border: 0; background: none; }
+#view-schedule:has(#schedule-host:not([hidden]):not(:empty)) .page-head { display: none; }
+#view-report:has(#report-host:not(:empty)) .page-head p { display: none; }
+
+/* ================= Two tabs: Home = 3D hall + one side panel; Details = schedule, prices, report ================= */
+:root { --agent-w: 340px; }
+#stage { top: var(--nav-h); bottom: 0; left: 0; right: calc(var(--agent-w) + var(--gutter) * 2); }
+.stage-top { top: calc(var(--nav-h) + var(--gutter)); left: calc((100vw - var(--agent-w) - var(--gutter) * 2) / 2); }
+.agent-card.side { display: flex; flex-direction: column; overflow-y: auto; padding: 0; }
+.side .side-time, .side .side-stats {
+  position: static; inset: auto; width: auto; height: auto; z-index: auto;
+  border: 0; border-radius: 0; border-bottom: 1px solid var(--rule); background: var(--sheet);
+}
+.side .side-time { padding: 16px 18px 14px; }
+.side .side-time .tp-row { flex-wrap: wrap; gap: 8px; }
+.side .side-time .tp-play { min-width: 84px; }
+.side .side-time .tp-clock { font-size: 28px !important; min-width: 0; margin-right: auto; }
+.side .side-time .tp-speed { order: 3; }
+.side .side-time .tp-restart { order: 4; }
+.side .side-time .tp-show { order: 5; flex-basis: 100%; margin: 4px 0 0; }
+.side .side-time .tp-show .seg { width: 100%; }
+.side .side-time .tp-track, .side .side-time .tp-legend, .side .side-time .tp-report { display: none !important; }
+.side .side-stats { padding: 6px 18px 12px; }
+.side .side-stats .scoreboard { display: flex; flex-direction: column; gap: 0; height: auto; margin: 0; border: 0; }
+.side .sb-card { border: 0; border-radius: 0; background: transparent; padding: 10px 0; border-bottom: 1px solid var(--hair-2); }
+.side .sb-card:last-of-type { border-bottom: 0; }
+.side .sb-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; row-gap: 2px; }
+.side .sb-name { font-size: 14px; }
+.side .sb-money { font-size: 30px; }
+.side .sb-meta { grid-column: 1 / -1; font-size: 12px; }
+.side .sb-foot { flex-direction: row; align-items: baseline; justify-content: space-between; background: transparent; padding-top: 12px; }
+.side .sb-saved { flex-direction: row; align-items: baseline; gap: 10px; width: 100%; justify-content: space-between; }
+.side .sb-saved small { font-size: 14px; }
+.side .sb-saved b { font-size: 40px; }
+.side .sb-clockline { display: none; }
+.side .sec-ask { padding: 16px 18px 18px; }
+.side .sec-ask .sec-label { font-size: 22px; }
+
+/* Details: the three sections on one scrolling page */
+.details-sec + .details-sec { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--rule); }
