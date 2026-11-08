@@ -52,6 +52,7 @@ class Plan(BaseModel):
     strategy: Strategy
     schedule: list[ScheduledTask]
     total_cost: float
+    tasks: list[Task] = []   # optional: full Task objects for non-backlog ids (phase 2); /simulate falls back to BACKLOG
 
 
 class PlanRequest(BaseModel):

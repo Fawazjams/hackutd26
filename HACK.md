@@ -128,3 +128,4 @@ Sleep in shifts; someone is always building.
 
 ## Status log
 - 20:18 PRD written after grilling: maintenance planner priced in GPU compute dollars; NMC² + NVIDIA. Next: agree on JSON contracts, then split up.
+- Loki: /backlog (6 seeded tasks; T1+T2 share Z2, T4+T5 share Z4; T1 CRAC-2 + T6 CDU-3 overlap = neighbor cooling loss -> overheat) and /simulate (hourly racks offline, zone temps, zone_conflict/overheat/window/unknown_task) done, 16 tests. Added optional `Plan.tasks` (for Nemotron-added tasks) and thermal constants in config.py. Planner: import `simulate_plan` / `find_conflicts` from `app.simulate` to reject bad plans. Stub ASAP plan currently overheats Z2/Z3 Mon 09-12.

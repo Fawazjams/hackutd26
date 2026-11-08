@@ -23,3 +23,20 @@ SLA_PENALTY = 0.10
 
 # Risk (ASSUMED)
 UNPLANNED_COST_MULTIPLIER = 3.0
+
+# Hall layout + thermal sim (ASSUMED; owner: Loki)
+RACKS_PER_ZONE = NUM_RACKS // len(COOLING_ZONES)          # ASSUMED: Z1 = racks 0-9, Z2 = 10-19, ...
+ZONE_RACKS = {z: list(range(i * RACKS_PER_ZONE, (i + 1) * RACKS_PER_ZONE)) for i, z in enumerate(COOLING_ZONES)}
+ZONE_NEIGHBORS = {                                        # ASSUMED: zones laid out in a line, neighbors share backup cooling
+    z: [COOLING_ZONES[j] for j in (i - 1, i + 1) if 0 <= j < len(COOLING_ZONES)]
+    for i, z in enumerate(COOLING_ZONES)
+}
+COOLING_EQUIPMENT = ("CRAC", "CDU", "CHILLER")            # task.equipment prefix => that zone loses cooling while it runs
+BASE_ZONE_TEMP_C = 24.0           # ASSUMED: normal cold-aisle inlet temp
+TEMP_NOISE_C = 0.3                # ASSUMED: ± seeded hourly noise
+OVERHEAT_C = 32.0                 # ASHRAE A1 allowable upper inlet limit (32 °C), used as the overheat line
+OFFLINE_COOLING_C = 2.0           # ASSUMED: zone runs this much cooler when all its racks are offline
+COOLING_LOSS_C = 10.0             # ASSUMED: rise × online-rack share when the zone's own cooling is down (neighbors back it up)
+COOLING_LOSS_NO_BACKUP_C = 20.0   # ASSUMED: same, but a neighbor's cooling is also down, so no backup
+NEIGHBOR_LOAD_C = 1.5             # ASSUMED: rise when a neighbor zone leans on this zone's cooling
+THERMAL_RESPONSE = 0.6            # ASSUMED: share of the gap to target temp closed each hour (thermal inertia)
