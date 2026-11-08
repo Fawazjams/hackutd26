@@ -267,6 +267,7 @@ async function onAgentPlan(e) {
     setAlarmState(it ? `Nemotron scheduled the repair: ${it.start_label} to ${it.end_label}, ${money(it.total)}.`
       : 'Nemotron added the repair, but no slot fits this week.');
   }
+  if (incident) window.dispatchEvent(new CustomEvent('incident:done', { detail: { incident_id: incident.id || 'INC1', task, plan } }));
 }
 
 // ---------------------------------------------------------------- simulated alarms
@@ -1190,6 +1191,14 @@ const BOOT = { t: Number(Q.get('t')) || 0, paused: Q.get('paused') === '1' };
   // ?turn=N rotates the camera N quarter-turns once the hall is up (rehearsals, screenshots)
   initHall().then(() => { for (let i = 0; i < (Number(Q.get('turn')) || 0) % 4; i++) call('rotate', +1); });
   initAgentPanel();
+  // Replacement-compute procurement panel (agents negotiate with other providers after an alarm).
+  import('./ui/procurement-panel.js')
+    .then(m => m.initProcurementPanel?.({ container: document.getElementById('procure'), getHall: () => dc }))
+    .catch(e => console.warn('[procure] panel unavailable:', e));
+  // Money-at-risk card (expected cost, price band, worst case incl. overheats) from POST /exposure.
+  import('./ui/exposure-card.js')
+    .then(m => m.initExposureCard?.({ container: document.getElementById('exposure'), getMode: () => S.mode }))
+    .catch(e => console.warn('[exposure] card unavailable:', e));
   window.addEventListener('agent:step', onAgentStep);
   window.addEventListener('agent:plan', onAgentPlan);
   loadMode(S.mode);

@@ -143,6 +143,11 @@ export function createPlaceholderHall(containerEl) {
     setPaused() {},
     onRackClick(cb) { clickCb = cb; },
     getRackIds() { return racks.map(r => r.id); },
+    showProviders() {},
+    hideProviders() {},
+    setProviderState() {},
+    sendNegotiator() { return Promise.resolve(); },
+    returnNegotiator() { return Promise.resolve(); },
     dispose() { wrap.remove(); note.remove(); },
   };
 }

@@ -331,6 +331,11 @@ export async function createDataCenter(containerEl) {
     document.documentElement.style.setProperty('--sky', `#${sky.getHexString()}`);
   }
 
+  // ================================================================ PROVIDER ISLANDS + NEGOTIATOR DRONE
+  // Fictional replacement-compute providers that float in beside the hall during an incident.
+  // All motion runs on wall-clock time so it animates while the week is paused.
+  const providers = createProviders(scene);
+
   let last = performance.now(), animT = 0, raf = 0, disposed = false;
   function frame(now) {
     if (disposed) return;
@@ -345,6 +350,7 @@ export async function createDataCenter(containerEl) {
     updateCamera();
     for (const f of anim) f(animT, state.paused ? 0 : dt, state);
     hall.tick(animT, now / 1000, state);
+    providers.tick(now / 1000);
 
     // both styles go through the post pass (outlines, optional palette)
     renderer.setRenderTarget(post.rt);
@@ -454,6 +460,22 @@ export async function createDataCenter(containerEl) {
       if (key) { shot.pos.set(-2, 1, ROW_Z[i]); cam.zoomTarget = 2.0; }
       else { shot.pos.copy(home); cam.zoomTarget = 1; }
     },
+    /** Float in one small data-center island per provider [{id, name}] and zoom out to fit. */
+    showProviders(list = []) {
+      providers.show(list);
+      shot.zone = null; shot.pos.copy(home);
+      cam.zoomTarget = 0.55;
+    },
+    hideProviders() {
+      providers.hide();
+      cam.zoomTarget = 1;
+    },
+    /** 'idle' | 'talking' | 'deal' | 'no_deal' */
+    setProviderState(id, st) { providers.setState(id, st); },
+    /** Drone flies from the hall to the provider; resolves on arrival. */
+    sendNegotiator(id) { return providers.fly(id, true); },
+    /** Drone flies back to the hall; resolves on arrival. */
+    returnNegotiator() { return providers.fly(null, false); },
     setPaused(p) { state.paused = !!p; },
     onRackClick(cb) { state.clickCb = typeof cb === 'function' ? cb : null; },
     getRackIds() { return hall.racks.map(r => r.id); },
@@ -1074,6 +1096,191 @@ function buildHall(parent, R, anim) {
       loop(patrol[0], 0, 1.4);
       loop(patrol[1], 40, 1.1);
       for (const tp of techPool) if (tp.visible) tp.children[0].rotation.x = Math.sin(wall * 5) * 0.15;
+    },
+  };
+}
+
+// ================================================================== PROVIDERS (replacement compute)
+// Small floating islands for fictional providers + a negotiator drone that flies between them.
+function createProviders(scene) {
+  const root = new THREE.Group();
+  scene.add(root);
+  const ROOF = { halden: 0x3f6fb0, corvid: 0x8463b4 };
+  // perpendicular to the default camera direction (az = 45deg), so they sit left/right on screen
+  const SLOTS = [new THREE.Vector3(-56, -3, 56), new THREE.Vector3(56, -3, -56), new THREE.Vector3(0, -6, -80)];
+  const HOME = new THREE.Vector3(0, 14, 0);
+  const islands = new Map();          // id -> {group, base, born, dying, beaconMat, light, state}
+
+  function label(text) {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 64;
+    const c = cv.getContext('2d');
+    c.fillStyle = 'rgba(23,35,43,0.92)'; c.fillRect(0, 0, 256, 64);
+    c.fillStyle = '#76b900'; c.fillRect(0, 58, 256, 6);
+    c.fillStyle = '#f6f8f8'; c.font = 'bold 30px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(text, 128, 30);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    s.scale.set(16, 4, 1);
+    s.renderOrder = 10;
+    return s;
+  }
+
+  function build(id, name) {
+    const g = new THREE.Group();
+    const R = rng(id.length * 977 + id.charCodeAt(0));
+    const W = 26, D = 20;
+    const roof = ROOF[id] ?? 0x2f8f7b;
+    box(W, 1.0, D, mat(C.grass), 0, -0.5, 0, g);
+    const layers = [[W, 1.4, D, C.soil, -1.7], [W - 4, 1.8, D - 4, C.rock, -3.3],
+      [W - 10, 2.0, D - 9, C.rockDark, -5.2], [W - 17, 2.2, D - 14, C.rock, -7.3], [W - 22, 2.0, D - 17, C.rockDark, -9.3]];
+    for (const [w, h, d, c, y] of layers) box(w, h, d, mat(c), 0, y, 0, g);
+    for (let i = 0; i < 10; i++) {
+      const s = 1 + R() * 1.6;
+      box(s, s, s, mat(R() < 0.5 ? C.rock : C.rockDark), (R() - 0.5) * (W - 6), -3 - R() * 4,
+        (R() < 0.5 ? -1 : 1) * (D / 2 - 3), g).rotation.y = R() * 3;
+    }
+    box(18, 0.25, 12, mat(C.concrete), 0, 0.12, 0, g);
+    const wall = mat(C.wall);
+    box(16, 3.2, 0.3, wall, 0, 1.6, -5.4, g);
+    box(0.3, 3.2, 11, wall, -8, 1.6, 0, g);
+    box(0.3, 3.2, 11, wall, 8, 1.6, 0, g);
+    box(16.4, 0.5, 0.5, mat(roof), 0, 3.4, -5.4, g);
+    box(0.5, 0.5, 11.4, mat(roof), -8, 3.4, 0, g);
+    box(0.5, 0.5, 11.4, mat(roof), 8, 3.4, 0, g);
+    const led = new THREE.MeshLambertMaterial({ color: 0x0b0d10, emissive: C.led, emissiveIntensity: 0.9 });
+    for (const z of [-2, 2]) for (let i = 0; i < 6; i++) {
+      const x = -6 + i * 2.4;
+      box(1.4, 2.4, 1.2, mat(C.rack), x, 1.45, z, g);
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.0), led);
+      p.position.set(x, 1.45, z + 0.61);
+      g.add(p);
+    }
+    box(0.25, 5, 0.25, mat(C.steelDark), 7, 2.5, 4.5, g);
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), beaconMat);
+    beacon.position.set(7, 5.6, 4.5);
+    g.add(beacon);
+    const light = new THREE.PointLight(0xffc14d, 0, 26, 1.6);
+    light.position.set(0, 7, 0);
+    g.add(light);
+    const tag = label(name);
+    tag.position.set(0, 11, 0);
+    g.add(tag);
+    g.traverse(o => { o.raycast = () => {}; });   // never picked as a rack
+    return { group: g, beaconMat, light, state: 'idle' };
+  }
+
+  // ---- negotiator drone
+  const drone = new THREE.Group();
+  const dMat = new THREE.MeshLambertMaterial({ color: 0x76b900, emissive: 0x76b900, emissiveIntensity: 0.9 });
+  box(1.4, 0.5, 1.4, dMat, 0, 0, 0, drone);
+  box(0.5, 0.35, 0.5, mat(C.ink), 0, -0.4, 0, drone);
+  const rotor = new THREE.Group();
+  box(3.4, 0.08, 0.3, mat(C.ink), 0, 0, 0, rotor);
+  box(0.3, 0.08, 3.4, mat(C.ink), 0, 0, 0, rotor);
+  rotor.position.y = 0.45;
+  drone.add(rotor);
+  const dLight = new THREE.PointLight(0x9cff4a, 0, 18, 1.5);
+  drone.add(dLight);
+  drone.visible = false;
+  drone.position.copy(HOME);
+  drone.traverse(o => { o.raycast = () => {}; });
+  root.add(drone);
+  const TRAIL = 24;
+  const trailMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.35, 0.35, 0.35),
+    new THREE.MeshBasicMaterial({ color: 0xb6ff6a }), TRAIL);
+  trailMesh.raycast = () => {};
+  trailMesh.castShadow = false;
+  root.add(trailMesh);
+  const trail = Array.from({ length: TRAIL }, () => ({ p: new THREE.Vector3(0, -999, 0), age: 9 }));
+  let trailIdx = 0, lastDrop = 0, lastT = 0;
+  let flight = null;   // {from, to, t0, dur, resolve, back}
+  const dummy = new THREE.Object3D();
+  const now = () => performance.now() / 1000;
+
+  function hover(id) {
+    const isl = islands.get(id);
+    return isl ? isl.base.clone().add(new THREE.Vector3(0, 13, 0)) : HOME.clone();
+  }
+
+  return {
+    show(list) {
+      list.forEach((p, i) => {
+        if (islands.has(p.id)) { islands.get(p.id).dying = 0; return; }
+        const e = build(p.id, p.name || p.id);
+        e.base = SLOTS[i % SLOTS.length].clone();
+        e.born = now(); e.dying = 0;
+        e.group.position.copy(e.base).add(new THREE.Vector3(0, -30, 0));
+        e.group.scale.setScalar(0.001);
+        root.add(e.group);
+        islands.set(p.id, e);
+      });
+    },
+    hide() {
+      for (const e of islands.values()) if (!e.dying) e.dying = now();
+      if (flight) { const f = flight; flight = null; f.resolve(); }
+      drone.visible = false;
+    },
+    setState(id, st) {
+      const e = islands.get(id);
+      if (e) e.state = ['idle', 'talking', 'deal', 'no_deal'].includes(st) ? st : 'idle';
+    },
+    fly(id, out) {
+      const from = drone.visible ? drone.position.clone() : HOME.clone();
+      const to = out ? hover(id) : HOME.clone();
+      if (flight) { const f = flight; flight = null; f.resolve(); }
+      drone.visible = true;
+      drone.position.copy(from);
+      return new Promise(resolve => { flight = { from, to, t0: now(), dur: 1.6, resolve, back: !out }; });
+    },
+    tick(t) {
+      const dt = Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
+      for (const [id, e] of islands) {
+        const born = clamp01((t - e.born) / 1.0);
+        const ease = 1 - Math.pow(1 - born, 3);
+        let k = ease, dy = (1 - ease) * -30;
+        if (e.dying) {
+          const d = clamp01((t - e.dying) / 0.8);
+          k = 1 - d; dy = -d * 30;
+          if (d >= 1) { root.remove(e.group); islands.delete(id); continue; }
+        }
+        e.group.scale.setScalar(Math.max(0.001, k));
+        e.group.position.set(e.base.x, e.base.y + dy + Math.sin(t * 0.8 + e.base.x) * 0.4, e.base.z);
+        const pulse = 0.5 + 0.5 * Math.sin(t * 7);
+        if (e.state === 'talking') { e.beaconMat.color.setHex(pulse > 0.5 ? 0xffc14d : 0xf2a33a); e.light.color.setHex(0xffc14d); e.light.intensity = 40 + 60 * pulse; }
+        else if (e.state === 'deal') { e.beaconMat.color.setHex(0x76b900); e.light.color.setHex(0x76b900); e.light.intensity = 90; }
+        else if (e.state === 'no_deal') { e.beaconMat.color.setHex(0xff3b2e); e.light.color.setHex(0xff3b2e); e.light.intensity = 70; }
+        else { e.beaconMat.color.setHex(0x333333); e.light.intensity = 0; }
+      }
+      if (flight) {
+        const f = clamp01((t - flight.t0) / flight.dur);
+        const s = f * f * (3 - 2 * f);
+        drone.position.lerpVectors(flight.from, flight.to, s);
+        drone.position.y += Math.sin(Math.PI * s) * 12;      // arc
+        if (f >= 1) {
+          const done = flight; flight = null;
+          if (done.back) drone.visible = false;
+          done.resolve();
+        }
+      }
+      if (drone.visible) {
+        rotor.rotation.y = t * 30;
+        dLight.intensity = 30;
+        if (flight && t - lastDrop > 0.05) {
+          lastDrop = t;
+          trail[trailIdx].p.copy(drone.position); trail[trailIdx].age = 0;
+          trailIdx = (trailIdx + 1) % TRAIL;
+        }
+      } else dLight.intensity = 0;
+      trail.forEach((p, i) => {
+        p.age += dt;
+        const sc = Math.max(0, 1 - p.age * 1.6);
+        dummy.position.copy(p.p); dummy.scale.setScalar(sc); dummy.updateMatrix();
+        trailMesh.setMatrixAt(i, dummy.matrix);
+      });
+      trailMesh.instanceMatrix.needsUpdate = true;
     },
   };
 }

@@ -16,8 +16,9 @@ Read this out loud while you rehearse. Every number below comes from the merged 
 | Demo: ASAP | 0:15–0:45 | Play the **ASAP** week, stop at Mon 12:00 | "Here's this week's backlog: CRAC compressor, PDU breakers, firmware, UPS test, fiber, coolant flush. Done the usual way, ASAP, the CRAC-2 replacement and the CDU-3 flush both start Monday at 9. They're cooling units in neighboring zones, so there's no backup cooling. Watch the ticker: zones Z2 and Z3 go over 32 degrees, five zone-hours, with Z3 peaking at 34.8." |
 | Demo: optimized | 0:45–1:15 | Play **our plan**, end on the summary card | "Our optimizer prices every hour of downtime in GPU-market dollars, using real H100 rental prices from 46 providers (GetDeploying data; about $4.16 an hour this week in our forecast) plus failure risk that grows while a job waits. It checks every slot against the thermal sim. Same backlog: **zero overheats versus five.** If each overheat hour became an outage, ASAP costs $31,867 and we cost $18,223." |
 | Demo: Nemotron | 1:15–2:05 | Click the **UPS-B** chip, then point at the trace | "Now a new job comes in: 'UPS-B battery swap, 3 hours, vendor only Wednesday or Friday.' Nemotron isn't chatting. It plans: it looks up the equipment, converts days to hours with our tool, adds the task, runs the optimizer, then runs the simulator to check the result. It lands Wednesday at 2 AM, with no conflicts and no overheating. **Every number on screen comes from our code, not the model.**" |
-| Tech | 2:05–2:30 | Click **Shift handoff** | "Under the hood: a FastAPI backend with a deterministic optimizer, an hour-by-hour thermal sim of 40 racks in 4 cooling zones, and Nemotron on build.nvidia.com calling 7 tools. Guardrails pin the numbers, and if the sim ever flags a problem, the agent re-plans around it. Then it writes the shift handoff, so the next crew knows what's running, the zone temps to watch, and what a one-day delay costs." |
-| Honesty + close | 2:30–2:50 | Stay on the handoff | "To be straight with you: the hall, the backlog and the thermal model are simulated. The prices are real market data from 46 providers, with our own daily forecast on top, and most of the dollar gap is those overheats priced at an assumed outage rate. Plug in real telemetry and a live price feed, and this runs on a real hall. Thank you." |
+| Demo: agents negotiate | 2:05–2:35 | Fire the **INC1** alarm (CRAC-3, Wed 14:00), then click **Accept** on the offer card | "An alarm takes 336 contracted GPU-hours down. Paying the client's SLA credit isn't free, so our agent flies out to two other data centers, Halden Compute and Corvid Cloud, and negotiates cover. Our break-even is $3.575 an hour: our contract rate plus the credit we'd owe. Corvid won't go below $3.62, so we walk. Halden agrees at $3.39: $1,139 instead of $1,201 if we don't cover. **Agents negotiate. Code checks. A person signs.**" *(If shown: point at the "Money at risk" card and the many-week eval result; numbers in docs/EVAL.md.)* |
+| Tech | 2:35–2:45 | Click **Shift handoff** | "Under the hood: FastAPI, a deterministic optimizer, an hour-by-hour thermal sim, and Nemotron calling our tools. Every number comes from code, and the handoff tells the next crew what to watch." |
+| Honesty + close | 2:45–3:00 | Stay on the handoff | "To be straight with you: the hall, the backlog, the thermal model and the two data centers we negotiated with are simulated, and the negotiation follows scripted, code-bounded rules. The prices are real market data from 46 providers, with our own daily forecast on top, and most of the dollar gap is those overheats priced at an assumed outage rate. Plug in real telemetry and a live price feed, and this runs on a real hall. Thank you." |
 
 **If a judge wants to type:** hand them the keyboard for an unscripted request (see "Requests" below). It takes about 15–40 seconds live, so fill the wait by narrating the trace as the steps appear.
 
@@ -25,7 +26,7 @@ Read this out loud while you rehearse. Every number below comes from the merged 
 
 ## 30-second version (a judge walks up mid-pitch)
 
-"We schedule data-center maintenance around GPU market prices without overheating the hall." *(point at the summary card)* "Doing it ASAP overheats two cooling zones on Monday; our plan has zero overheats." *(click the UPS-B chip)* "And Nemotron takes plain-English jobs like this one, calls our optimizer and simulator as tools, and schedules it safely. Every number comes from code, not the model."
+"We schedule data-center maintenance around GPU market prices without overheating the hall." *(point at the summary card)* "Doing it ASAP overheats two cooling zones on Monday; our plan has zero overheats." *(click the UPS-B chip)* "And Nemotron takes plain-English jobs like this one, calls our optimizer and simulator as tools, and schedules it safely. Every number comes from code, not the model." *(fire INC1)* "When an outage takes contracted GPUs down, our agent negotiates replacement compute from other data centers, under a break-even code sets. Agents negotiate. Code checks. A person signs."
 
 ---
 
@@ -92,6 +93,12 @@ Real telemetry instead of the simulated hall, a live price feed, a solver for bi
 **12. Which tracks, and how do you meet them?**
 - **NVIDIA "Beyond a chatbot":** Nemotron plans and executes a multi-step workflow (lookup, windows, add task, compare slots, choose slot, plan, simulate, re-plan) through 9 tools, chooses between priced options, and acts on a simulated alarm with no human prompt.
 - **NMC² "keep the world running":** it catches the warning before it happens (overheat), puts the right information at the right time (priced schedule), and fixes the unclear handoff (shift brief).
+
+**13. "Is the negotiation real AI?"**
+"Not yet, and we say so. Today it's scripted, code-bounded rules: each seller has an opening ask from the market price and a floor, offers move in fixed steps, and only accept, counter or walk are allowed. The two companies are fictional. Next is Nemotron agents choosing those moves, inside the same code limits, so no model ever sets a price."
+
+**14. "Why buy compute instead of just paying the SLA credit?"**
+"If we don't cover, we lose the contract revenue and owe a 10% credit: 1.1 times our contract rate. At an assumed $3.25 contract rate, that's a break-even of $3.575 an hour. Buying cover below that is cheaper than not covering. Halden at $3.39 saves $62.16 on this incident, and the client gets their hours. Corvid stopped at $3.62, above break-even, so the agent walked away."
 
 ---
 

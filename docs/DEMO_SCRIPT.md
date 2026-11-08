@@ -7,6 +7,7 @@
 - [ ] Frontend open, mode = **GPU cloud**
 - [ ] `NVIDIA_API_KEY` in `backend/.env`; one warm-up `/request` sent (avoid a cold first call on camera)
 - [ ] Fallback plans loaded in the UI (works even if the backend dies)
+- [ ] Replacement compute: `POST /procure {"incident_id":"INC1"}` returns Halden $3.39/GPU-hr (total $1,139.04, saves $62.16), Corvid no deal; restart uvicorn after backend changes so `/procure` is live
 - [x] Overheat beat confirmed on the final ASAP baseline: Z2/Z3 over 32 C Mon 10:00-12:00 (5 zone-hours)
 
 ---
@@ -53,6 +54,12 @@ repair, prices fixing now against waiting a day, picks the cheapest safe slot, a
 before 14:00 stays where it was." Seeded result (offline fallback gives the same): repair **Wed 14:00-17:00**,
 waiting a day would cost **+$210.24** (risk grows 4%/day, ASSUMED), no overheating. Point at the
 `compare_slots` → `choose_slot` steps in the trace: that's the model deciding, code doing the math.
+
+## Rehearse the negotiation beat
+1. Fire the INC1 alarm (CRAC-3, Wed 14:00), or click **Source cover for INC1** in the Replacement compute panel.
+2. Check: two islands (Halden Compute, Corvid Cloud) rise beside the hall; the drone flies to each; Corvid ends no deal (walked at $3.62), Halden deal at $3.39.
+3. Offer card: $1,139.04 vs $1,201.20 if not covered, saves $62.16 on 336 GPU-hours. Click **Accept**; the ledger shows it as simulated.
+4. Say: "Agents negotiate. Code checks. A person signs." Run twice; numbers must match.
 
 ## If it breaks, say this
 - **Agent/API fails:** "Nemotron's rate-limited right now. Here's the same request from our rehearsal." Then show the saved run. "The plan and the numbers come from our optimizer either way; the model only parses and explains."
