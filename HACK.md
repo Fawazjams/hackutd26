@@ -94,7 +94,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 | Assumption | Starting value | Why it's reasonable | Source |
 |---|---|---|---|
 | Hall size | 40 racks × 32 H100 = 1,280 GPUs | Typical scale for an AI hall row set | None (assumed) |
-| Price forecast | Real H100 on-demand median $4.02/hr (Nov 2, 2026) + 8-week trend; 90% band from 26-week volatility | History is real; the daily forecast is our model | [GetDeploying dataset](https://getdeploying.com/gpu-price-trends) |
+| Price forecast | Real H100 on-demand median $4.02/hr (median of 128 offerings from 46 providers, Nov 2, 2026; per-provider median $3.96) + 8-week trend; 90% band from 26-week volatility | History is real; the daily forecast is our model | [GetDeploying dataset](https://getdeploying.com/gpu-price-trends) |
 | Hourly utilization | 93–96%, brief dips to 92–93% | AI clusters run near full; dips at job boundaries | None (assumed) |
 | Risk growth while a task waits | +0.5–2%/day failure chance, by task | Deferred maintenance raises failure odds | None (assumed) |
 | Unplanned failure cost | 3× planned downtime + emergency premium | Unplanned outages run longer and cost more | None (assumed) |
@@ -127,7 +127,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 
 ## Honesty (disclose in the demo)
 - The facility, telemetry, backlog, utilization and risk numbers are simulated or assumed (see Assumptions).
-- Prices: real weekly history from GetDeploying (H100 on-demand median across providers, $4.02/hr as of 2026-11-02, in `backend/data/gpu-prices/`). The daily forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
+- Prices: real weekly history from GetDeploying (H100 on-demand, 46 providers: median of 128 offerings $4.02/hr, per-provider median $3.96, as of 2026-11-02; in `backend/data/gpu-prices/`). The daily forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
 - Don't claim NMC² uses this market, or that CME compute futures are trading.
 - Nemotron rehearsed requests: for the 3 scripted demo requests the parsed task is pinned to a pre-verified version (and used outright if Nemotron is offline/rate-limited). Unscripted requests use Nemotron's parse as-is.
 - Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
@@ -173,3 +173,4 @@ Sleep in shifts; someone is always building.
 - 22:15 Loki reviewed + merged PR #3 (includes PR #2) into main. Verified: 74 tests, live server ASAP $31,867.40 (5 overheats) vs optimized $18,222.79 (0), live Nemotron request clean. Pitch note: ~99% of the 42.8% is overheats priced at the ASSUMED outage rate (two of five zone-hours only 32.3/32.7 C); lead with "0 overheats vs 5". Open: confirm GetDeploying data reuse terms before repo goes public.
 
 - 22:25 Pitch written (PITCH.md): 3-min script, 30-s version, 10 Q&A answers. DEMO_SCRIPT rehearsed requests fixed to match demo_requests.py. Found: weekend PDU request's $ saving is not like-for-like (ASAP can't schedule weekend jobs); don't quote it.
+- 22:35 GetDeploying data license confirmed on https://getdeploying.com/dataset/gpu-prices: CC BY 4.0, attribution "GetDeploying, GPU rental price history, https://getdeploying.com/gpus, CC BY 4.0" added to README, DEVPOST, data README. Clarified two medians (offering median $4.02 used by market.py vs per-provider median $3.96). TODO Nandhan: add the credit line under the price chart in the UI.

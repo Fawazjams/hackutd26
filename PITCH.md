@@ -14,10 +14,10 @@ Read this out loud while you rehearse. Every number below comes from the merged 
 |---|---|---|---|
 | Open | 0:00–0:15 | UI already open on the hall | "Every time a GPU data center takes racks down for maintenance, those GPU-hours have a market price, and nobody schedules around it. Ops teams just do it ASAP during business hours. We built the planner that prices the downtime and keeps the hall safe." |
 | Demo: ASAP | 0:15–0:45 | Play the **ASAP** week, stop at Mon 12:00 | "Here's this week's backlog: CRAC compressor, PDU breakers, firmware, UPS test, fiber, coolant flush. Done the usual way, ASAP, the CRAC-2 replacement and the CDU-3 flush both start Monday at 9. They're cooling units in neighboring zones, so there's no backup cooling. Watch the ticker: zones Z2 and Z3 go over 32 degrees, five zone-hours, with Z3 peaking at 34.8." |
-| Demo: optimized | 0:45–1:15 | Play **our plan**, end on the summary card | "Our optimizer prices every hour of downtime in GPU-market dollars, using real H100 prices from GetDeploying (about $4.16 an hour this week) plus failure risk that grows while a job waits. It checks every slot against the thermal sim. Same backlog: **zero overheats versus five.** If each overheat hour became an outage, ASAP costs $31,867 and we cost $18,223." |
+| Demo: optimized | 0:45–1:15 | Play **our plan**, end on the summary card | "Our optimizer prices every hour of downtime in GPU-market dollars, using real H100 rental prices from 46 providers (GetDeploying data; about $4.16 an hour this week in our forecast) plus failure risk that grows while a job waits. It checks every slot against the thermal sim. Same backlog: **zero overheats versus five.** If each overheat hour became an outage, ASAP costs $31,867 and we cost $18,223." |
 | Demo: Nemotron | 1:15–2:05 | Click the **UPS-B** chip, then point at the trace | "Now a new job comes in: 'UPS-B battery swap, 3 hours, vendor only Wednesday or Friday.' Nemotron isn't chatting. It plans: it looks up the equipment, converts days to hours with our tool, adds the task, runs the optimizer, then runs the simulator to check the result. It lands Wednesday at 2 AM, with no conflicts and no overheating. **Every number on screen comes from our code, not the model.**" |
 | Tech | 2:05–2:30 | Click **Shift handoff** | "Under the hood: a FastAPI backend with a deterministic optimizer, an hour-by-hour thermal sim of 40 racks in 4 cooling zones, and Nemotron on build.nvidia.com calling 7 tools. Guardrails pin the numbers, and if the sim ever flags a problem, the agent re-plans around it. Then it writes the shift handoff, so the next crew knows what's running, the zone temps to watch, and what a one-day delay costs." |
-| Honesty + close | 2:30–2:50 | Stay on the handoff | "To be straight with you: the hall, the backlog and the thermal model are simulated. The prices are real weekly market data with our forecast on top, and most of the dollar gap is those overheats priced at an assumed outage rate. Plug in real telemetry and a live price feed, and this runs on a real hall. Thank you." |
+| Honesty + close | 2:30–2:50 | Stay on the handoff | "To be straight with you: the hall, the backlog and the thermal model are simulated. The prices are real market data from 46 providers, with our own daily forecast on top, and most of the dollar gap is those overheats priced at an assumed outage rate. Plug in real telemetry and a live price feed, and this runs on a real hall. Thank you." |
 
 **If a judge wants to type:** hand them the keyboard for an unscripted request (see "Requests" below). It takes about 15–40 seconds live, so fill the wait by narrating the trace as the steps appear.
 
@@ -60,7 +60,7 @@ With Nemotron live, the trace shows real tool calls. For rehearsed requests the 
 The operations lead at a GPU data center planning the week's maintenance. Honest answer: we haven't interviewed one yet; the evidence is public. 57% of operators said their last major outage cost over $100K (Uptime 2026), and most GPU cloud capacity is pre-sold, so missed hours carry penalties. *(Ask the NMC² booth tonight how they schedule maintenance. A real quote from them beats this answer.)*
 
 **2. What did you build vs. use?**
-We built the optimizer, the thermal sim, the cost model, the agent loop, its guardrails and the UI. We used FastAPI, Nemotron through NVIDIA's hosted API, and GetDeploying's public GPU price history.
+We built the optimizer, the thermal sim, the cost model, the agent loop, its guardrails and the UI. We used FastAPI, Nemotron through NVIDIA's hosted API, and GetDeploying's GPU price history (CC BY 4.0, credited in the README).
 
 **3. What's mocked?**
 The hall, backlog, utilization, failure risk and thermal model are simulated, and every assumed number is labeled in `config.py`. Prices are real weekly data with our own daily forecast on top, and they're a snapshot, not a live feed. For the 3 rehearsed requests, Nemotron's parse is pinned to a verified task.
@@ -83,7 +83,10 @@ The free Nemotron endpoint: it's rate-limited, and each request makes several mo
 **9. Another week?**
 Real telemetry instead of the simulated hall, a live price feed, a solver for bigger backlogs, a fine-tuned smaller Nemotron, and escalation calls to on-call techs.
 
-**10. Which tracks, and how do you meet them?**
+**10. "Are those prices real?"**
+"The history is real: weekly H100 rental prices from 46 providers, from GetDeploying's open dataset. Today's median is about $4 an hour. That's in line with Silicon Data's public H100 index at $3.04 and the Ornn index, which went from $2.31 to $4.95 in about two months. The day-by-day forecast for this week is our model, and it's a snapshot, not a live feed."
+
+**11. Which tracks, and how do you meet them?**
 - **NVIDIA "Beyond a chatbot":** Nemotron plans and executes a multi-step workflow (lookup, windows, add task, plan, simulate, re-plan) through 7 tools, for a real operations problem.
 - **NMC² "keep the world running":** it catches the warning before it happens (overheat), puts the right information at the right time (priced schedule), and fixes the unclear handoff (shift brief).
 
