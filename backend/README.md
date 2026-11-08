@@ -19,8 +19,8 @@ Nemotron key: `NVIDIA_API_KEY=...` in `backend/.env` (gitignored). Check models/
 | `app/backlog.py` | Loki | `GET /backlog`: 6 seeded tasks (T1+T2 share Z2, T4+T5 share Z4, T1+T6 overheat if overlapped) |
 | `app/simulate.py` | Loki | `POST /simulate`: hourly racks offline, zone temps, `zone_conflict`/`overheat`/`window`/`unknown_task`; `simulate_plan`, `find_conflicts` for the planner |
 | `app/planner.py` | Nandhan | `POST /plan`: ASAP baseline (business hours) + optimizer (greedy + local improvement) |
-| `app/agent.py` | Loki | `POST /request` (Nemotron tool loop, code-side re-plan, numbers-checked explanation) and `POST /handoff` (shift brief) |
-| `app/demo_requests.py` | Loki | 3 rehearsed requests → pinned `Task`s; offline fallback |
+| `app/agent.py` | Loki | `POST /request` + `POST /request/stream` (Nemotron tool loop, code-side re-plan, numbers-checked explanation) and `POST /handoff` (shift brief) |
+| `app/demo_requests.py` | Loki | 3 rehearsed requests → verified `Task`s (swapped in only if Nemotron's parse differs); offline fallback |
 | `scripts/nemotron_check.py` | Loki | Lists Nemotron models, runs a 3-tool loop, optional rate-limit probe |
 
 `POST /plan {"mode": "cloud"|"private", "strategy": "optimized"|"asap", "tasks": [...]?}`.

@@ -39,7 +39,7 @@ Read this out loud while you rehearse. Every number below comes from the merged 
 
 **Unscripted, for a judge:** "Swap the fan tray on CRAC-1, about 2 hours, any weekday afternoon" was tested live and came back clean.
 
-With Nemotron live, the trace shows real tool calls. For rehearsed requests the parsed task is pinned to the verified version, and that's disclosed below.
+With Nemotron live, the trace shows real tool calls. For rehearsed requests the parsed task is checked against the verified version and swapped for it only if Nemotron got something wrong, and that's disclosed below.
 
 ---
 
@@ -63,7 +63,7 @@ The operations lead at a GPU data center planning the week's maintenance. Honest
 We built the optimizer, the thermal sim, the cost model, the agent loop, its guardrails and the UI. We used FastAPI, Nemotron through NVIDIA's hosted API, and GetDeploying's GPU price history (CC BY 4.0, credited in the README).
 
 **3. What's mocked?**
-The hall, backlog, utilization, failure risk and thermal model are simulated, and every assumed number is labeled in `config.py`. Prices are real weekly data with our own daily forecast on top, and they're a snapshot, not a live feed. For the 3 rehearsed requests, Nemotron's parse is pinned to a verified task.
+The hall, backlog, utilization, failure risk and thermal model are simulated, and every assumed number is labeled in `config.py`. Prices are real weekly data with our own daily forecast on top, and they're a snapshot, not a live feed. For the 3 rehearsed requests, Nemotron's parse is checked against a verified task and replaced by it if they differ.
 
 **4. Hardest technical problem?**
 Making "never overheats" true by design. The optimizer runs the hour-by-hour thermal sim on every candidate slot, which still only takes about 17 ms per plan. The second hardest: keeping the LLM from ever producing a number. It only calls tools, and any explanation with a number the tools didn't return gets replaced by the code-built text.

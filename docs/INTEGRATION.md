@@ -28,12 +28,26 @@ the old ASAP plan, or `POST /plan {mode, strategy: "asap", tasks: [...backlog, t
 { "task": Task | null,
   "plan": { "mode": "cloud", "strategy": "optimized", "total_cost": 0.0,
             "items": [PlanItem...], "unscheduled": [{"task_id","reason"}] } | null,
-  "explanation": "New task R1: ... saving $700.17 (4.2%) ...",
+  "explanation": "New task R1: ... saving $13,731.87 (37.9%) ...",
   "tool_calls": ["lookup_equipment", "day_windows", "add_task", "make_plan", "simulate",
                  "guardrail:make_plan[asap]", "fallback:add_task", ...] }
 ```
 `guardrail:` = a step our code ran to check/complete the plan; `fallback:` = Nemotron unavailable,
 rehearsed task used. The panel labels them "code check" / "offline fallback".
+
+`POST /request/stream {text}` → the same run as NDJSON (`application/x-ndjson`), one event per line
+the moment it happens:
+```
+{"type":"start","text":str,"llm":bool}
+{"type":"thinking","by":"nemotron","step":int}            // before each Nemotron call
+{"type":"tool","by":"nemotron"|"code","name":str,"label":str,"args":{...},"result":{...}}
+{"type":"explaining"}
+{"type":"done","response":AgentResponse}                  // identical to POST /request
+{"type":"error","message":str}                            // instead of done if the run crashes
+```
+`label` sequence == `done.response.tool_calls`. `name` is the bare tool (`make_plan`, `pinned_demo_task`, ...).
+get_backlog/get_prices results are `{"count": n}`; make_plan results are the plan summary
+(`strategy, mode, total_cost, schedule[{task_id,start,end,start_hour,end_hour,cost}], unscheduled`).
 
 `POST /handoff {mode?, extra_tasks?: [Task]}` → `{ shift_brief: str, items: [...], llm_used: bool }`
 (being added on the agent router; until it exists the button shows "Handoff endpoint not available yet").

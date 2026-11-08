@@ -21,12 +21,12 @@ DEMO_REQUESTS: dict[str, Task] = {
     # Shares zone Z4 with T4 (UPS-A test) and T5 (fiber): planner must keep them apart.
     "UPS-B battery swap, 3 hrs, vendor only Wed or Fri": Task(
         id="R1", name="UPS-B battery swap", equipment="UPS-B", duration_hrs=3,
-        racks_affected=_racks("D", 1, 10), zone="Z4", risk_growth_per_day=0.02,
+        racks_affected=_racks("D", 1, 10), zone="Z4", risk_growth_per_day=0.01,
         allowed_windows=_days([2, 4])),
     # Cooling outage in Z4, neighbor of Z3 where T6 (CDU-3) runs: overlap would overheat.
     "CRAC-4 filter and belt service, 4 hours, weekdays 8am to 6pm": Task(
         id="R2", name="CRAC-4 filter and belt service", equipment="CRAC-4", duration_hrs=4,
-        racks_affected=_racks("D", 1, 5), zone="Z4", risk_growth_per_day=0.012,
+        racks_affected=_racks("D", 1, 5), zone="Z4", risk_growth_per_day=0.01,
         allowed_windows=_days([0, 1, 2, 3, 4], 8, 18)),
     # Shares zone Z3 with T6 (CDU-3 flush).
     "PDU row C breaker inspection, 2 hours, weekend only": Task(

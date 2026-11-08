@@ -7,13 +7,16 @@ writes that isn't in the facts makes us fall back to the facts text verbatim.
 """
 import json
 import os
+import queue
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from dotenv import load_dotenv
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 
 from .config import COOLING_ZONES, HOURS, OVERHEAT_C, ZONE_NEIGHBORS, ZONE_RACKS
@@ -28,6 +31,7 @@ NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"  # only model that chained 3 tools in scripts/nemotron_check.py
 MAX_STEPS = 8
 MAX_AVOID_TRIES = 6
+STREAM_IDLE_TIMEOUT_S = 180  # /request/stream gives up if no event arrives for this long
 THERMAL_TAIL_HRS = 3  # violations this many hours after a job ends still count as caused by it (thermal inertia)
 DEFAULT_RISK_GROWTH = 0.01  # ASSUMED: per-day failure-chance growth when the request doesn't say
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -106,6 +110,7 @@ class AgentState:
     llm_used: bool = False
     excluded: dict[str, list[list[int]]] = field(default_factory=dict)  # task id -> week-hour ranges removed by avoid_violations
     requested: dict[str, Task] = field(default_factory=dict)  # task as the operator asked for it (before avoid_violations)
+    on_event: Callable[[dict[str, Any]], None] | None = field(default=None, repr=False)  # /request/stream
 
     def as_requested(self, t: Task) -> Task:
         return self.requested.get(t.id, t)
@@ -240,6 +245,30 @@ def _plan_summary(plan: Plan) -> dict[str, Any]:
                           "start_hour": s.start_hour, "end_hour": s.end_hour, "cost": s.total}
                          for s in plan.items],
             "unscheduled": [u.model_dump() for u in plan.unscheduled]}
+
+
+# ---------------------------------------------------------------- live events (/request/stream)
+
+
+def emit(state: AgentState, event: dict[str, Any]) -> None:
+    """Send one event to the stream listener, if any. A broken listener never breaks the agent."""
+    if state.on_event is None:
+        return
+    try:
+        state.on_event(event)
+    except Exception:
+        pass
+
+
+def _record(state: AgentState, label: str, args: dict[str, Any], result: Any) -> None:
+    """Append `label` to the tool trace and emit the matching `tool` event."""
+    state.tool_calls.append(label)
+    name = re.sub(r"^(guardrail|fallback):", "", label).split("[")[0]
+    by_code = label.startswith(("guardrail:", "fallback:")) or name in ("llm_error", "pinned_demo_task")
+    if name in ("get_backlog", "get_prices") and isinstance(result, list):
+        result = {"count": len(result)}  # keep the stream small
+    emit(state, {"type": "tool", "by": "code" if by_code else "nemotron", "name": name, "label": label,
+                 "args": args, "result": result})
 
 
 def run_tool(state: AgentState, name: str, args: dict[str, Any]) -> Any:
@@ -378,7 +407,8 @@ def get_llm() -> LLM | None:
 def _run_llm_loop(state: AgentState, llm: LLM) -> None:
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT},
                                       {"role": "user", "content": state.text}]
-    for _ in range(MAX_STEPS):
+    for step in range(1, MAX_STEPS + 1):
+        emit(state, {"type": "thinking", "by": "nemotron", "step": step})
         msg = llm.chat(messages, TOOLS)
         calls = msg.get("tool_calls") or []
         messages.append({"role": "assistant", "content": msg.get("content") or "",
@@ -390,29 +420,29 @@ def _run_llm_loop(state: AgentState, llm: LLM) -> None:
             try:
                 args = json.loads(c["function"].get("arguments") or "{}") or {}
             except json.JSONDecodeError as e:
-                result: Any = {"error": f"arguments were not valid JSON: {e}"}
+                args, result = {}, {"error": f"arguments were not valid JSON: {e}"}
             else:
                 result = run_tool(state, name, args)
                 if name == "make_plan" and args.get("avoid_violations"):
                     name += "[avoid_violations]"
-            state.tool_calls.append(name)
+            _record(state, name, args, result)
             messages.append({"role": "tool", "tool_call_id": c.get("id", name), "content": json.dumps(result)})
 
 
 def _finish_pipeline(state: AgentState, prefix: str) -> None:
     """Code-enforced: make sure we have optimized + asap plans and a sim of the optimized plan.
     If the sim shows violations, re-plan once and re-simulate (the planner may route around them)."""
-    def call(name: str, args: dict[str, Any]) -> None:
-        run_tool(state, name, args)
-        state.tool_calls.append(f"{prefix}{name}" + (f"[{args['strategy']}]" if "strategy" in args else ""))
+    def call(name: str, args: dict[str, Any], tag: str | None = None) -> None:
+        result = run_tool(state, name, args)
+        tag = tag or args.get("strategy")
+        _record(state, f"{prefix}{name}" + (f"[{tag}]" if tag else ""), args, result)
 
     if "optimized" not in state.plans:
         call("make_plan", {"strategy": "optimized"})
     if state.violations is None:
         call("simulate", {})
     if state.violations:
-        run_tool(state, "make_plan", {"strategy": "optimized", "avoid_violations": True})
-        state.tool_calls.append(f"{prefix}make_plan[avoid_violations]")
+        call("make_plan", {"strategy": "optimized", "avoid_violations": True}, "avoid_violations")
         call("simulate", {})
     if "asap" not in state.plans:
         call("make_plan", {"strategy": "asap"})
@@ -481,14 +511,22 @@ def explain(state: AgentState, llm: LLM | None) -> str:
     return guarded_rewrite(llm, EXPLAIN_PROMPT, facts_text(build_facts(state)), state.text)[0]
 
 
-def run_request(text: str, llm: LLM | None) -> AgentResponse:
-    state = AgentState(text=text)
+def _safe_error(e: Exception) -> str:
+    msg = f"{type(e).__name__}: {e}"
+    key = os.getenv("NVIDIA_API_KEY", "").strip()
+    return msg.replace(key, "***") if key else msg
+
+
+def run_request(text: str, llm: LLM | None,
+                on_event: Callable[[dict[str, Any]], None] | None = None) -> AgentResponse:
+    """on_event (optional) gets thinking/tool/explaining events as they happen (/request/stream)."""
+    state = AgentState(text=text, on_event=on_event)
     if llm is not None:
         try:
             _run_llm_loop(state, llm)
             state.llm_used = True
-        except Exception:
-            state.tool_calls.append("llm_error")
+        except Exception as e:
+            _record(state, "llm_error", {}, {"error": _safe_error(e)})
             llm = None
 
     prefix = "guardrail:"
@@ -498,9 +536,9 @@ def run_request(text: str, llm: LLM | None) -> AgentResponse:
     if state.tasks and cached is not None:
         got = state.as_requested(state.tasks[-1]).model_dump(exclude={"id", "name"})
         if got != cached.model_dump(exclude={"id", "name"}):
-            state = AgentState(text=text, tool_calls=state.tool_calls, llm_used=state.llm_used)
+            state = AgentState(text=text, tool_calls=state.tool_calls, llm_used=state.llm_used, on_event=on_event)
             run_tool(state, "add_task", cached.model_dump())
-            state.tool_calls.append("guardrail:pinned_demo_task")
+            _record(state, "guardrail:pinned_demo_task", cached.model_dump(), {"task": cached.model_dump()})
     if not state.tasks:
         if cached is None:
             why = "couldn't turn that request into a task" if state.llm_used else \
@@ -508,12 +546,12 @@ def run_request(text: str, llm: LLM | None) -> AgentResponse:
             return AgentResponse(task=None, plan=None, tool_calls=state.tool_calls,
                                  explanation=f"Sorry, the agent {why}. Try naming the equipment, "
                                              "duration and allowed days, e.g. 'UPS-B battery swap, 3 hrs, vendor only Wed or Fri'.")
-        state = AgentState(text=text, tool_calls=state.tool_calls)
-        run_tool(state, "add_task", cached.model_dump())
-        state.tool_calls.append("fallback:add_task")
+        state = AgentState(text=text, tool_calls=state.tool_calls, on_event=on_event)
+        _record(state, "fallback:add_task", cached.model_dump(), run_tool(state, "add_task", cached.model_dump()))
         prefix, llm = "fallback:", None
 
     _finish_pipeline(state, prefix)
+    emit(state, {"type": "explaining"})
     return AgentResponse(task=state.as_requested(state.tasks[-1]), plan=state.plans["optimized"],
                          explanation=explain(state, llm), tool_calls=state.tool_calls,
                          asap_plan=state.plans["asap"])
@@ -522,6 +560,43 @@ def run_request(text: str, llm: LLM | None) -> AgentResponse:
 @router.post("/request", response_model=AgentResponse)
 def handle_request(req: AgentRequest) -> AgentResponse:
     return run_request(req.text, get_llm())
+
+
+@router.post("/request/stream")
+def handle_request_stream(req: AgentRequest) -> StreamingResponse:
+    """Same run as POST /request, as NDJSON events the moment they happen:
+    start, thinking*, tool*, explaining, done (or error). Labels of the tool events == done.response.tool_calls."""
+    llm = get_llm()
+    q: queue.Queue[str | None] = queue.Queue()
+
+    def put(event: dict[str, Any]) -> None:  # serialize now: later steps mutate the state behind it
+        q.put(json.dumps(event, default=str) + "\n")
+
+    def work() -> None:
+        try:
+            r = run_request(req.text, llm, on_event=put)
+            put({"type": "done", "response": r.model_dump(mode="json")})
+        except Exception as e:
+            put({"type": "error", "message": _safe_error(e)})
+        finally:
+            q.put(None)
+
+    put({"type": "start", "text": req.text, "llm": llm is not None})
+    threading.Thread(target=work, daemon=True).start()  # daemon: a dropped client never pins the server
+
+    def lines():
+        while True:
+            try:
+                line = q.get(timeout=STREAM_IDLE_TIMEOUT_S)
+            except queue.Empty:
+                yield json.dumps({"type": "error", "message": "agent timed out"}) + "\n"
+                return
+            if line is None:
+                return
+            yield line
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ---------------------------------------------------------------- shift handoff (NMC² "unclear handoff")
