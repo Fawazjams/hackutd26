@@ -32,13 +32,13 @@ Fawaz's lane (prices + cost model) is redistributed to Loki and Nandhan as of 21
 
 **P1: before 04:00 (polish that judges see)**
 - [ ] Nandhan: 3D hall (scene.js): racks go dark on schedule, zones glow red on overheat during ASAP playback.
-- [ ] Loki: agent re-plan for real: when the new task causes a violation, Nemotron sees it from `simulate` and re-plans (needs thermal-aware planner); trace shows the re-plan.
-- [ ] Loki (NMC² "unclear handoff"): `/handoff`: Nemotron writes a shift handoff / work order per scheduled task from tool numbers only (what, when, racks, zone temps to watch, risk if delayed). Button in the UI.
-- [ ] Nandhan: end-of-week summary shows $ saved and "0 overheats vs 5" side by side.
+- [x] Loki: agent re-plan for real: when the new task causes a violation, Nemotron sees it from `simulate` and re-plans (needs thermal-aware planner); trace shows the re-plan.
+- [x] Loki (NMC² "unclear handoff"): `/handoff`: Nemotron writes a shift handoff / work order per scheduled task from tool numbers only (what, when, racks, zone temps to watch, risk if delayed). Button in the UI.
+- [x] Nandhan: end-of-week summary shows $ saved and "0 overheats vs 5" side by side.
 
 **P2: 04:00-06:00 harden**
 - [ ] Both: rehearse 3 scripted + 1 unscripted request; same output every run; kill Wi-Fi once and confirm fallback.
-- [ ] Loki: README (run steps, architecture, honesty), secret scan (no keys in git).
+- [ ] Loki: ~~README~~ (done) · secret scan (no keys in git).
 
 **P3: 06:00-08:30 present**
 - [ ] Loki: 2-min video (docs/DEMO_SCRIPT.md), final Devpost with real $ figures.
@@ -120,7 +120,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 - Higgsfield CLI for visuals (undecided).
 
 ## Tasks to check early (first 1–2 hours)
-- [ ] **Nemotron tool calling on build.nvidia.com:** pick the model, test a 3-tool loop, and check the rate limit (reported ~40 requests/min, unverified).
+- [x] **Nemotron tool calling on build.nvidia.com:** pick the model, test a 3-tool loop, and check the rate limit (reported ~40 requests/min, unverified).
 - [x] **Free price feed:** try [GetDeploying](https://getdeploying.com/gpu-price-trends) (weekly history, 103 GPUs), the Silicon Data public page and Ornn. If none works, keep the seeded curve.
 - [ ] **Optimizer:** greedy vs. OR-Tools (Nandhan decides; greedy is faster).
 - [ ] **Ask the NMC² booth:** what maintenance actually costs them, and how they schedule it now. Their answer can make a pitch line.
