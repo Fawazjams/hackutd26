@@ -2,10 +2,8 @@
 
 > Registration due **Sat 23:00 CST**. Final edits allowed until Sun 12:00 PM CST. Lines tagged **[update after demo works]** depend on unfinished work; fix them before the final submit.
 
-## Title (product name TBD, pick one)
-1. **Downtime Desk**: maintenance priced in GPU-hours
-2. **Spot Window**: schedule maintenance when compute is cheapest
-3. **RackTime**: the maintenance planner that knows what a GPU-hour is worth
+## Title
+**DC Router**: maintenance priced in GPU-hours
 
 ## Tagline
 Every hour a GPU rack is down for maintenance has a market price. We schedule the week's maintenance backlog at the lowest compute cost without letting failure risk or cooling limits get out of hand.

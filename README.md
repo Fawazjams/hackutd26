@@ -1,5 +1,4 @@
-<!-- Working title: "Downtime, Priced" (the UI title). Product name is still TBD; see HACK.md "Open". -->
-# Downtime, Priced
+# DC Router
 
 **A maintenance planner for GPU data centers that schedules downtime when it costs the least, priced in GPU compute market dollars, with an NVIDIA Nemotron agent that plans the work.**
 

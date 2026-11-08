@@ -2,7 +2,7 @@
 
 Read this out loud while you rehearse. Every number below comes from the merged code on `main` (seed 42, cloud mode) as of Sat 22:20. Re-check them after any change to the planner or cost model.
 
-**Working name:** "Downtime, Priced" (the UI title; the final product name is still open in HACK.md)
+**Name:** DC Router
 
 **One-liner:** *We schedule GPU data-center maintenance at the lowest compute-market cost, without letting the hall overheat. Nemotron turns a plain-English work request into a safe, priced plan.*
 

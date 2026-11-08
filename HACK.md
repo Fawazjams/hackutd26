@@ -1,7 +1,7 @@
 # HACK.md: PRD
 
 > Shared plan for the team. Every hack-* skill reads and updates this file.
-> Product name: **TBD**. Last updated: Sat Nov 7, 20:18 CST.
+> Product name: **DC Router**. Last updated: Sat Nov 7, 20:18 CST.
 
 ## Event
 - **HackUTD 2026: ZeroDay**, UT Dallas (ECSW). Devpost: https://hackutd-zeroday.devpost.com/
@@ -135,7 +135,7 @@ Agree on the `Task` and `Plan` JSON shapes **in the first 20 minutes** before sp
 - **Lead with "0 overheats vs 5"**, not the 42.8%.
 
 ## Open (still undecided)
-- Product name, track 3, pitch roles, whether to use Higgsfield.
+- Track 3, pitch roles, whether to use Higgsfield.
 
 ## Budget (now 20:18 CST, about 12.7h to the 9 AM cutoff)
 | Phase | Clock (CST) | Goal |
@@ -175,4 +175,5 @@ Sleep in shifts; someone is always building.
 - Sun 01:5x Loki: key-moment cards (frontend/ui/play-by-play.js): as the week plays, cards explain each divergence from the plans' own data (ASAP takes down CRAC-2 + CDU-3 at Mon 09:00, Z3 33.4 C at 10:00 vs ours 25.4 C; ours overlaps them 1 h, peak 31.3 C). "Explain key moments" (on by default) plays the lead-in at 1x and holds 3 s. Plan gains optional zone_temps + temp_limit_c; fallback regenerated.
 - Sun 05:xx Nandhan: UI polish. Home camera now opens framed on the island (fits the visible meshes per camera angle, small margin). Top nav restyled to the card look (ink borders, hard shadows, condensed type). Details: sticky jump bar removed; 15 numbered equations (ui/formula.js, Barlow on graph paper) with this week's numbers plugged in from the plans (none on the market/prices section), plus the full cost + thermal model under Method. Numbers still all come from the backend.
 - Sun 05:30 Nandhan: UI is GPU-cloud only. Removed the Private DC toggle, the summary's "try the other mode" button and `?mode=private`. Backend `private` mode untouched. Replacement-compute panel compacted (provider cards collapse to a one-line outcome, ledger folds).
+- Sun 06:2x Nandhan: product name decided: **DC Router** (nav brand, page title, README, PITCH, DEVPOST, DEMO_SCRIPT).
 - Sun 02:5x Fawaz: replacement-compute procurement (docs/PROCUREMENT.md). INC1 takes C01-C05 down 3 h; Nebius and CoreWeave render as islands beside the hall; negotiator drone flies to each, code-bounded negotiation (opening ask from market price, secret floor, 5% steps), returns an offer; operator accepts or declines into a simulated ledger. Covers contracted share only (336 GPU-h); buy only below $3.575 break-even. Planner and pitch numbers unchanged. Inspired by Elix (propose, policy, approve, ledger).

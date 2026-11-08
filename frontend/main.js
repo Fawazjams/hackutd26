@@ -1,4 +1,4 @@
-// Downtime, Priced — UI controller.
+// DC Router — UI controller.
 // Loads the backlog, prices and both plans, plays the week forward in the 3D hall, and races
 // the $-lost counters for our plan vs ASAP. Every number on screen is computed from API data.
 
