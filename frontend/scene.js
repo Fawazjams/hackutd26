@@ -340,7 +340,9 @@ export async function createDataCenter(containerEl) {
     const rw = Math.max(1, Math.min(4096, Math.floor(w * scale)));
     const rh = Math.max(1, Math.min(4096, Math.floor(h * scale)));
     const filter = post.pixelArt ? THREE.NearestFilter : THREE.LinearFilter;
-    const rt = new THREE.WebGLRenderTarget(rw, rh, { minFilter: filter, magFilter: filter, generateMipmaps: false });
+    // MSAA in crisp mode: the canvas's antialias flag doesn't reach this target, so moving edges crawled
+    const samples = !post.pixelArt && renderer.capabilities.isWebGL2 ? 4 : 0;
+    const rt = new THREE.WebGLRenderTarget(rw, rh, { minFilter: filter, magFilter: filter, generateMipmaps: false, samples });
     rt.texture.colorSpace = THREE.LinearSRGBColorSpace;
     rt.depthTexture = new THREE.DepthTexture(rw, rh);
     rt.depthTexture.type = THREE.UnsignedIntType;
@@ -438,7 +440,7 @@ export async function createDataCenter(containerEl) {
     const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));   // never negative (first frame / clock skew)
     last = now;
     if (!state.paused) animT += dt;
-    cam.drift += dt * 0.25;
+    if (!dayHold) cam.drift += dt * 0.25;   // hold the sway while provider islands are up: it made their small detail shimmer
     cam.az += (cam.azTarget - cam.az) * Math.min(1, dt * 6);
     if (cam.home) { const f = homeFit(); cam.zoomTarget = f.zoom; shot.pos.copy(f.center); }
     cam.zoom += (cam.zoomTarget - cam.zoom) * Math.min(1, dt * (shot.zone ? 1.4 : 8));
@@ -1360,6 +1362,12 @@ function createProviders(scene) {
   const HOME = new THREE.Vector3(0, 14, 0);
   const islands = new Map();          // id -> {group, base, born, dying, beaconMat, light, state}
   const BEACON_HI = new THREE.Color(0xffe08a);
+  // These islands render small, so 1-texel tile lines and LED dots shimmer under nearest/no-mip sampling.
+  const islandTexture = (...args) => {
+    const t = canvasTexture(...args);
+    t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4;
+    return t;
+  };
 
   function label(text) {
     const cv = document.createElement('canvas');
@@ -1378,7 +1386,7 @@ function createProviders(scene) {
   }
 
   // same LED dot pattern as the main hall's rack faces
-  const dots = canvasTexture(16, 32, (c, w, h) => {
+  const dots = islandTexture(16, 32, (c, w, h) => {
     c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
     for (let y = 2; y < h - 2; y += 3) for (let x = 2; x < w - 2; x += 3) {
       const r = (x * 7 + y * 13) % 5;
@@ -1386,17 +1394,17 @@ function createProviders(scene) {
       c.fillRect(x, y, 1, 1);
     }
   });
-  const tileTex = canvasTexture(16, 16, (c, w, h) => {
+  const tileTex = islandTexture(16, 16, (c, w, h) => {
     c.fillStyle = '#e4dfd3'; c.fillRect(0, 0, w, h);
     c.fillStyle = '#cfc8b8'; c.fillRect(0, 0, w, 1); c.fillRect(0, 0, 1, h);
   }, [14, 10]);
-  const perfTex = canvasTexture(8, 8, (c, w, h) => {
+  const perfTex = islandTexture(8, 8, (c, w, h) => {
     c.fillStyle = '#a9cfe9'; c.fillRect(0, 0, w, h);
     c.fillStyle = '#7fb0d6'; for (let i = 1; i < w; i += 2) for (let j = 1; j < h; j += 2) c.fillRect(i, j, 1, 1);
   }, [8, 1]);
 
   function signTex(name, roof) {
-    return canvasTexture(128, 32, (c, w, h) => {
+    return islandTexture(128, 32, (c, w, h) => {
       c.fillStyle = '#1b1b1b'; c.fillRect(0, 0, w, h);
       c.fillStyle = `#${roof.toString(16).padStart(6, '0')}`; c.fillRect(0, h - 3, w, 3);
       c.fillStyle = '#f7f4ec'; c.font = 'bold 15px monospace'; c.textBaseline = 'middle';
@@ -1452,10 +1460,10 @@ function createProviders(scene) {
     floor.rotation.x = -Math.PI / 2; floor.position.y = Y; floor.receiveShadow = true; g.add(floor);
     for (const z of [-3.6, 3.6]) {
       const a = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.6), new THREE.MeshLambertMaterial({ map: perfTex }));
-      a.rotation.x = -Math.PI / 2; a.position.set(-1, Y + 0.01, z); g.add(a);
+      a.rotation.x = -Math.PI / 2; a.position.set(-1, Y + 0.03, z); g.add(a);
     }
     const hot = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.6), new THREE.MeshLambertMaterial({ color: C.hot }));
-    hot.rotation.x = -Math.PI / 2; hot.position.set(-1, Y + 0.01, 0); g.add(hot);
+    hot.rotation.x = -Math.PI / 2; hot.position.set(-1, Y + 0.03, 0); g.add(hot);
     const glass = new THREE.MeshLambertMaterial({ color: 0xffc59a, transparent: true, opacity: 0.35, depthWrite: false });
     for (const x of [-8.3, 6.3]) box(0.08, 2.4, 1.6, glass, x, Y + 1.2, 0, g).castShadow = false;
 
@@ -1469,7 +1477,7 @@ function createProviders(scene) {
       const ledMat = new THREE.MeshLambertMaterial({ color: 0x0b0d10, emissive: C.led, emissiveMap: dots, emissiveIntensity: 1 });
       for (const s of [-1, 1]) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(RW * 0.82, RH * 0.86), ledMat);
-        p.position.set(x, Y + RH / 2, rz + s * (RD / 2 + 0.011));
+        p.position.set(x, Y + RH / 2, rz + s * (RD / 2 + 0.03));
         if (s < 0) p.rotation.y = Math.PI;
         g.add(p);
       }
@@ -1486,7 +1494,7 @@ function createProviders(scene) {
     // CRAC units (west wall), CDU + PDU (row ends), UPS cabinets and a NOC desk
     for (const rz of [-3.6, 3.6]) {
       box(1.3, 2.8, 2.4, mat(0xe8e4da), -10, Y + 1.4, rz, g);
-      box(1.32, 0.4, 2.42, mat(roof), -10, Y + 2.6, rz, g);
+      box(1.32, 0.4, 2.42, mat(roof), -10, Y + 2.58, rz, g);   // top just under the unit's (coplanar tops z-fought)
       box(0.05, 1.4, 1.8, mat(0x8b9097), -9.33, Y + 1.2, rz, g);
     }
     for (const rz of [-1.7, 1.7]) {
@@ -1502,7 +1510,7 @@ function createProviders(scene) {
     const staff = person(C.shirt); staff.position.set(9.4, Y, 3.7); staff.rotation.y = Math.PI; g.add(staff);
 
     // walls: dollhouse style (back + sides full height, front low) with roof trim and a company sign
-    const wallTex = canvasTexture(32, 32, (c, w, h) => {
+    const wallTex = islandTexture(32, 32, (c, w, h) => {
       c.fillStyle = '#efe9dc'; c.fillRect(0, 0, w, h);
       c.fillStyle = '#e2dbcb'; for (let y = 0; y < h; y += 8) c.fillRect(0, y, w, 1);
     }, [4, 1]);
@@ -1561,7 +1569,7 @@ function createProviders(scene) {
   // ducted fan at the tail with a hex-grille face
   const duct = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.22, 10, 24), shell);
   duct.rotation.y = Math.PI / 2; duct.position.set(-2.55, 0.05, 0); body.add(duct);
-  const grilleTex = canvasTexture(32, 32, (c, w, h) => {
+  const grilleTex = islandTexture(32, 32, (c, w, h) => {
     c.fillStyle = '#9aa3ab'; c.fillRect(0, 0, w, h);
     c.fillStyle = '#2a2d31';
     for (let y = 0; y < h; y += 4) for (let x = (y / 4) % 2 ? 2 : 0; x < w; x += 4) c.fillRect(x, y, 2, 2);
@@ -1675,8 +1683,9 @@ function createProviders(scene) {
           if (d >= 1) { root.remove(e.group); islands.delete(id); continue; }
         }
         e.group.scale.setScalar(Math.max(0.001, k));
-        e.group.position.set(e.base.x, e.base.y + dy + Math.sin(t * 0.8 + e.base.x) * 0.4, e.base.z);
-        for (const r of e.racks) r.ledMat.emissiveIntensity = 0.75 + 0.45 * Math.sin(t * r.speed + r.phase) ** 8;
+        // no idle bob and only a soft LED pulse: sub-pixel motion and sharp spikes read as flicker at this size
+        e.group.position.set(e.base.x, e.base.y + dy, e.base.z);
+        for (const r of e.racks) r.ledMat.emissiveIntensity = 0.85 + 0.15 * Math.sin(t * r.speed * 0.4 + r.phase);
         for (const f of e.fans) f.rotation.y += dt * 9;
         // Beacon blinks; the island's light stays steady (a 40-100 strobe at ~1 Hz flashed the whole hall amber).
         const pulse = 0.5 + 0.5 * Math.sin(t * 4);
