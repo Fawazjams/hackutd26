@@ -7,7 +7,7 @@
   <meta name="description" content="Schedule GPU data-center maintenance at the lowest cost, priced in H100 compute-market dollars." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 
   <!-- Dev aid: surface any JS error on the page instead of failing silently. -->
@@ -39,45 +39,43 @@
     <div class="stage-loading" id="stage-loading"><span class="spinner" aria-hidden="true"></span>Building the hall…</div>
   </div>
 
-  <!-- Top-left: title block -->
+  <!-- Left column: title block + ledger -->
   <header class="brand">
-    <div class="kicker">3D diorama <span class="dot-sep">·</span> GPU hall</div>
-    <h1 class="title">Downtime,<br />priced.</h1>
-    <p class="lede">A 1,280-GPU hall with a week of maintenance to fit in. Every lost GPU-hour is priced at the H100 compute market rate, and the planner picks the cheapest safe hour for each job. Watch it race the do-it-ASAP plan.</p>
+    <h1 class="title">Downtime, priced.</h1>
+    <p class="lede">A week of maintenance on a 1,280-GPU hall. Every hour a rack is down costs what an H100 rents for, so the planner finds the cheapest hours that keep the hall cool, and races the do-it-now plan.</p>
     <div class="chip chip-offline" id="offline-chip" hidden title="The API did not answer, so this page is showing a saved copy of real backend responses.">
-      <span class="chip-dot"></span>Offline — cached plan
+      <span class="chip-dot"></span>Offline, showing a saved plan
     </div>
-  </header>
 
-  <!-- Top-center: LED scoreboard -->
-  <section class="scoreboard" id="scoreboard" aria-label="Dollars lost so far">
-    <div class="sb-head">
-      <span>$ lost so far</span>
-      <span class="sb-mode" id="sb-mode">GPU cloud</span>
-    </div>
-    <div class="sb-row" data-plan="optimized">
-      <span class="sb-dot"></span>
-      <span class="sb-name">Our plan</span>
-      <span class="sb-bar"><i id="sb-bar-ours"></i></span>
-      <span class="sb-money led" id="sb-ours">$0</span>
-      <span class="sb-gpus" title="GPUs offline right now under this plan"><b id="sb-gpus-ours">0</b><small>GPU off</small></span>
-    </div>
-    <div class="sb-row" data-plan="asap">
-      <span class="sb-dot"></span>
-      <span class="sb-name">ASAP</span>
-      <span class="sb-bar"><i id="sb-bar-asap"></i></span>
-      <span class="sb-money led" id="sb-asap">$0</span>
-      <span class="sb-gpus" title="GPUs offline right now under this plan"><b id="sb-gpus-asap">0</b><small>GPU off</small></span>
-    </div>
-    <div class="sb-foot">
-      <span class="sb-clock led" id="sb-clock">MON 00:00</span>
-      <span class="sb-status" id="sb-status">▶ 1×</span>
-      <span class="sb-saved" id="sb-saved-wrap" title="Savings on work finished in both plans: ASAP cost minus our cost, task by task">
-        <small>Saved</small><b class="led" id="sb-saved">$0</b>
-      </span>
-      <span class="sb-delta" title="Share of this week's final savings already banked"><i id="sb-delta"></i></span>
-    </div>
-  </section>
+    <section class="scoreboard" id="scoreboard" aria-label="Cost of downtime so far">
+      <div class="ledger-head"><span>Lost to downtime so far</span><span class="sb-mode" id="sb-mode">GPU cloud</span><span class="sb-def">ASAP is the usual plan: start every job at the first business-hours slot.</span></div>
+      <div class="sb-row" data-plan="optimized">
+        <span class="sb-name">Our plan <span class="in-hall">in the hall</span></span>
+        <span class="sb-money" id="sb-ours">$0</span>
+        <span class="sb-bar"><i id="sb-bar-ours"></i></span>
+        <span class="sb-meta">
+          <span class="sb-gpus" title="GPUs taken down right now under this plan"><b id="sb-gpus-ours">0</b> GPUs down now</span>
+          <span class="sb-heat" id="sb-heatw-ours"><b id="sb-heat-ours">0</b> overheats</span>
+        </span>
+      </div>
+      <div class="sb-row" data-plan="asap">
+        <span class="sb-name">ASAP <span class="in-hall">in the hall</span></span>
+        <span class="sb-money" id="sb-asap">$0</span>
+        <span class="sb-bar"><i id="sb-bar-asap"></i></span>
+        <span class="sb-meta">
+          <span class="sb-gpus" title="GPUs taken down right now under this plan"><b id="sb-gpus-asap">0</b> GPUs down now</span>
+          <span class="sb-heat" id="sb-heatw-asap"><b id="sb-heat-asap">0</b> overheats</span>
+        </span>
+      </div>
+      <div class="sb-foot">
+        <div class="sb-saved" id="sb-saved-wrap" title="Savings on work finished in both plans, plus overheats avoided so far">
+          <small>Saved so far</small><b id="sb-saved">$0</b>
+        </div>
+        <span class="sb-delta" title="Share of this week's final savings already banked"><i id="sb-delta"></i></span>
+        <div class="sb-clockline"><span class="sb-clock" id="sb-clock">Mon 00:00</span><span class="sb-status" id="sb-status"></span></div>
+      </div>
+    </section>
+  </header>
 
   <!-- Bottom-center: event ticker -->
   <section class="ticker" aria-live="polite" aria-label="Event log">
@@ -90,7 +88,7 @@
     <span><kbd>Space</kbd> play / pause</span>
     <span><kbd>←</kbd><kbd>→</kbd> step an hour</span>
     <span><kbd>Q</kbd><kbd>E</kbd> turn</span>
-    <span><kbd>Tab</kbd> our plan / ASAP</span>
+    <span><kbd>Tab</kbd> switch plan</span>
     <span><kbd>R</kbd> replay</span>
   </footer>
 
@@ -114,7 +112,7 @@
     </section>
 
     <section class="sec">
-      <div class="sec-label"><span>Show in hall</span></div>
+      <div class="sec-label"><span>Show in the hall</span></div>
       <div class="seg seg-2" role="radiogroup" aria-label="Plan shown in the hall" id="seg-show">
         <button role="radio" data-value="optimized" aria-checked="true"><i class="sw sw-ours"></i>Our plan</button>
         <button role="radio" data-value="asap" aria-checked="false"><i class="sw sw-asap"></i>ASAP</button>
@@ -122,15 +120,16 @@
     </section>
 
     <section class="sec">
-      <div class="sec-label"><span>Backlog</span><span class="sec-aside">ours · asap · cost</span></div>
+      <div class="sec-label"><span>This week’s jobs</span><span class="sec-aside">start times, cost</span></div>
       <ol class="ladder" id="ladder"></ol>
       <div class="ladder-note" id="ladder-note"></div>
     </section>
 
     <section class="sec">
-      <div class="sec-label"><span>H100 price forecast</span><span class="sec-aside">$/GPU-hr</span></div>
+      <div class="sec-label"><span>H100 rental price</span><span class="sec-aside">$ per GPU-hour</span></div>
       <div class="price-chart" id="price-chart"></div>
-      <div class="caption">Forecast from real GetDeploying H100 prices (weekly, through Nov 2). Not a live feed.</div>
+      <div class="caption">Daily forecast is our model, built on real weekly H100 prices through Nov 2. Not a live feed.</div>
+      <div class="caption credit">Data: <a href="https://getdeploying.com/gpus" target="_blank" rel="noopener">GetDeploying</a>, GPU rental price history, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Changed: daily trend forecast added.</div>
     </section>
 
     <section class="sec">
@@ -197,11 +196,11 @@
   <div class="summary" id="summary" hidden role="dialog" aria-labelledby="summary-title">
     <div class="summary-card">
       <button class="summary-x" id="summary-close" aria-label="Close">×</button>
-      <div class="kicker">Week complete <span class="dot-sep">·</span> <span id="summary-mode"></span></div>
+      <div class="kicker">Week complete, <span id="summary-mode"></span></div>
       <h2 id="summary-title" class="summary-title"></h2>
       <div class="summary-grid" id="summary-grid"></div>
       <div class="summary-actions">
-        <button class="btn-dark" id="summary-replay">↺ Replay week</button>
+        <button class="btn-dark" id="summary-replay">Replay the week</button>
         <button class="btn-ghost" id="summary-swap">Show the other mode</button>
       </div>
     </div>

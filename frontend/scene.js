@@ -148,7 +148,7 @@ export async function createDataCenter(containerEl) {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const target = new THREE.Vector3(0, -7, 0);
   const cam = { az: Math.PI / 4, azTarget: Math.PI / 4, el: 0.62, zoom: 1, zoomTarget: 1, dist: 160, drift: 0 };
-  const VIEW_H = 104; // world units visible vertically at zoom 1 (whole island + underside)
+  const VIEW_H = 90; // world units visible vertically at zoom 1 (whole island + underside)
 
   // ---- lights
   const hemi = new THREE.HemisphereLight(0xfff6e6, 0x6b5a48, 0.9);
@@ -293,7 +293,7 @@ export async function createDataCenter(containerEl) {
     const vh = VIEW_H / cam.zoom;
     // keep the whole island in frame on narrow stages
     const vw = Math.max(vh * aspect, 0);
-    const fit = Math.max(1, 118 / cam.zoom / vw);
+    const fit = Math.max(1, 102 / cam.zoom / vw);
     camera.left = -vw / 2 * fit; camera.right = vw / 2 * fit;
     camera.top = vh / 2 * fit; camera.bottom = -vh / 2 * fit;
     const az = cam.az + Math.sin(cam.drift) * 0.025;
@@ -324,10 +324,9 @@ export async function createDataCenter(containerEl) {
     hall.setNight(state.night);
     outside.setNight(state.night);
     // tint the stage itself: cream by day, dusk lavender at night (kept light so overlay text stays readable)
-    const top = new THREE.Color(0xf7f4ec).lerp(new THREE.Color(0xc9c3d8), state.night * 0.85);
-    const bot = new THREE.Color(0xf1eee6).lerp(new THREE.Color(0xdcd6e2), state.night * 0.85);
-    containerEl.style.background = `radial-gradient(ellipse 70% 60% at 50% 55%, #${top.getHexString()}cc, #${bot.getHexString()}00 70%), #${bot.getHexString()}`;
-    document.body.style.backgroundColor = `#${bot.getHexString()}`;
+    // page ground: drafting vellum by day, a cool dusk at night (light enough for the ink text)
+    const sky = new THREE.Color(0xe8ecec).lerp(new THREE.Color(0xc2cad6), state.night * 0.9);
+    document.documentElement.style.setProperty('--sky', `#${sky.getHexString()}`);
   }
 
   let last = performance.now(), animT = 0, raf = 0, disposed = false;
