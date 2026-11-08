@@ -38,6 +38,13 @@ const postPlan = (mode, strategy) => request('/plan', {
   body: JSON.stringify({ mode, strategy }),
 });
 
+/** One plan for an explicit task list (e.g. backlog + a task Nemotron added). Throws if offline. */
+export const planWithTasks = (mode, strategy, tasks) => request('/plan', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ mode, strategy, tasks }),
+});
+
 /** Everything the UI needs for one mode. Falls back to the cached snapshot if any call fails. */
 export async function loadAll(mode) {
   try {

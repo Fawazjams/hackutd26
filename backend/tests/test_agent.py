@@ -152,3 +152,125 @@ def test_request_endpoint_deterministic():
     assert a.status_code == 200
     assert a.json() == b.json()
     assert a.json()["task"]["equipment"] == "UPS-B"
+
+
+# ---- avoid_violations: a real re-plan ----
+# The planner is thermal-aware, so on its own it never returns an overheating plan. The agent's
+# avoid_violations re-plan is the safety net for when it would; these tests make the planner blind
+# to heat caused by the new task R1 (`planner_ignores_heat`) to exercise that net. Backlog jobs are
+# still placed heat-safely among themselves, as the agent only ever moves new tasks.
+
+from app import planner as _planner  # noqa: E402
+_REAL_OVERHEATS = _planner._Planner.overheats
+
+
+def ignore_heat_from_new_task(monkeypatch, task_id="R1"):
+    monkeypatch.setattr(_planner._Planner, "overheats", lambda self, schedule: _REAL_OVERHEATS(
+        self, {k: v for k, v in schedule.items() if k != task_id}))
+
+
+@pytest.fixture
+def planner_ignores_heat(monkeypatch):
+    ignore_heat_from_new_task(monkeypatch)
+
+
+def neighbor_cooling_scenario():
+    """Build a new cooling task that a heat-blind planner would put on top of a backlog cooling
+    job in the neighboring zone, with a second, safe window it should be moved to. Built from the live
+    optimized plan so it survives cost-model changes."""
+    from app import planner
+    from app.backlog import BACKLOG
+    from app.config import ZONE_NEIGHBORS, ZONE_RACKS
+    from app.simulate import is_cooling_task, simulate_plan
+    from app.schemas import Task, Window
+    patched = planner._Planner.overheats            # build from the real, heat-aware planner
+    planner._Planner.overheats = _REAL_OVERHEATS
+    try:
+        base = planner.make_plan(BACKLOG, "cloud", "optimized")
+    finally:
+        planner._Planner.overheats = patched
+    assert simulate_plan(base).violations == [], "precondition: seeded optimized week is clean"
+    lookup = {t.id: t for t in BACKLOG}
+    for c in base.items:
+        ct = lookup[c.task_id]
+        if not is_cooling_task(ct):
+            continue
+        for zone in ZONE_NEIGHBORS[ct.zone]:
+            busy = [i for i in base.items if i.zone == zone and i.start_hour < c.end_hour and c.start_hour < i.end_hour]
+            if busy:
+                continue
+            dur = c.end_hour - c.start_hour
+            related = {zone, *ZONE_NEIGHBORS[zone]}
+            for s in range(168 - dur, c.end_hour, -1):   # latest safe slot after the clash
+                clash = [i for i in base.items if s < i.end_hour + 3 and i.start_hour < s + dur + 3
+                         and (i.zone == zone or (is_cooling_task(lookup[i.task_id]) and i.zone in related))]
+                if not clash:
+                    n = "1234"["Z1 Z2 Z3 Z4".split().index(zone)]
+                    task = Task(id="R1", name=f"CRAC-{n} fan swap", equipment=f"CRAC-{n}", duration_hrs=dur,
+                                racks_affected=ZONE_RACKS[zone][:5], zone=zone, risk_growth_per_day=1.0,
+                                allowed_windows=[Window(start_hour=c.start_hour, end_hour=c.end_hour),
+                                                 Window(start_hour=s, end_hour=s + dur)])
+                    return task, (c.start_hour, c.end_hour), (s, s + dur)
+    pytest.skip("no neighbor-cooling clash constructible for this cost model")
+
+
+def test_thermal_planner_avoids_the_clash_on_its_own():
+    from app.backlog import task_lookup
+    from app.simulate import simulate_plan
+    task, clash, safe = neighbor_cooling_scenario()
+    state = agent.AgentState(text="x")
+    agent.run_tool(state, "add_task", task.model_dump())
+    agent.run_tool(state, "make_plan", {"strategy": "optimized"})
+    # Clean on the first try: the planner may move R1 or the backlog cooling job it would hit.
+    assert simulate_plan(state.plans["optimized"], task_lookup(state.tasks)).violations == []
+    assert agent._simulate(state) == []
+
+
+def test_avoid_violations_moves_new_task_to_safe_window(planner_ignores_heat):
+    from app.backlog import task_lookup
+    from app.simulate import simulate_plan
+    task, clash, safe = neighbor_cooling_scenario()
+    state = agent.AgentState(text="x")
+    agent.run_tool(state, "add_task", task.model_dump())
+    first = agent.run_tool(state, "make_plan", {"strategy": "optimized"})
+    assert next(s for s in first["schedule"] if s["task_id"] == "R1")["start_hour"] == clash[0]
+    assert any(v.kind == "overheat" for v in agent._simulate(state)), "precondition: planner overlaps them"
+
+    out = agent.run_tool(state, "make_plan", {"strategy": "optimized", "avoid_violations": True})
+    moved = next(s for s in out["schedule"] if s["task_id"] == "R1")
+    assert moved["start_hour"] == safe[0]
+    assert out["avoid_violations"]["violations_after"] == 0
+    assert out["avoid_violations"]["excluded_hours"]["R1"]
+    assert simulate_plan(state.plans["optimized"], task_lookup(state.tasks)).violations == []
+
+
+def test_llm_chooses_avoid_violations_and_trace_shows_it(planner_ignores_heat):
+    task, clash, safe = neighbor_cooling_scenario()
+    args = task.model_dump(exclude={"id"})
+    llm = ScriptedLLM([
+        msg(call("add_task", args)),
+        msg(call("make_plan", {"strategy": "optimized"})),
+        msg(call("simulate")),
+        msg(call("make_plan", {"strategy": "optimized", "avoid_violations": True})),
+        msg(call("simulate")),
+        msg(content="Done."),
+        {"role": "assistant", "content": "", "tool_calls": []},
+    ])
+    r = run_request("CRAC fan swap next to the CDU job", llm)
+    assert r.tool_calls[:5] == ["add_task", "make_plan", "simulate", "make_plan[avoid_violations]", "simulate"]
+    assert not any(c.startswith("guardrail:make_plan[avoid") for c in r.tool_calls)  # LLM already fixed it
+    sim_result = json.loads([m for m in llm.received[5] if m["role"] == "tool"][-1]["content"])
+    assert sim_result["violations"] == 0
+    assert next(i for i in r.plan.items if i.task_id == "R1").start_hour == safe[0]
+    assert r.task.allowed_windows == task.allowed_windows      # response shows what the operator asked for
+    assert "Re-planned to avoid" in r.explanation
+
+
+def test_guardrail_replans_when_llm_ignores_violations(planner_ignores_heat):
+    task, clash, safe = neighbor_cooling_scenario()
+    llm = ScriptedLLM([msg(call("add_task", task.model_dump(exclude={"id"}))),
+                       msg(call("make_plan", {"strategy": "optimized"})), msg(content="Done.")])
+    r = run_request("CRAC fan swap next to the CDU job", llm)
+    assert "guardrail:make_plan[avoid_violations]" in r.tool_calls
+    assert next(i for i in r.plan.items if i.task_id == "R1").start_hour == safe[0]
+    assert "no cooling-zone conflicts or overheating" in r.explanation

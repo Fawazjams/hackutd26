@@ -54,14 +54,15 @@ An operations lead opens the week's maintenance backlog: CRAC compressor replace
 - [fill in after the build]
 
 ## What's next
-- Plug in a live price feed (e.g. GetDeploying weekly history, Silicon Data, Ornn indices) instead of the seeded curve.
+- Plug in a live price feed (Silicon Data, Ornn indices, or GetDeploying refreshed automatically) instead of the weekly snapshot.
 - Real facility telemetry (temps, utilization) instead of the simulated hall.
 - Escalation calls and texts to the on-call technician.
 - Fine-tune Nemotron on maintenance tickets.
 
 ## Honesty / disclosures
 - The facility, telemetry, backlog, utilization and risk numbers are **simulated or assumed**. Every assumed value is labeled in `backend/app/config.py`.
-- Prices are a **seeded sample curve based on public index levels** (H100 at $3.04/hr from [Silicon Data](https://www.silicondata.com/products/silicon-index)) with an assumed ±10% daily band. **This is not a live feed.**
+- Prices: the **history is real** (GetDeploying weekly H100 on-demand median across ~46 providers, $4.02/GPU-hr on 2026-11-02, in `backend/data/gpu-prices/`); the day-by-day forecast for the planning week (latest median + 8-week trend, 90% band from real volatility) is **our model**. A snapshot, **not a live feed**.
+- Overheats are priced: each zone-hour over 32 °C in our (assumed) thermal sim counts the GPUs still running there as an unplanned outage at the assumed 3× + 20% rate. Most of the optimized-vs-ASAP savings (~99% on the seeded week) is ASAP's 5 overheat zone-hours priced this way, not price timing.
 - We do not claim NMC² uses this market, or that CME compute futures are trading.
 
 ## Built With
