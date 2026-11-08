@@ -216,9 +216,21 @@
 
   <!-- View 2: schedule -->
   <main class="view page" id="view-details" role="tabpanel" aria-labelledby="nav-details">
+  <nav class="dt-nav" aria-label="Details sections">
+    <a href="#view-report">Bottom line</a><a href="#view-savings">Savings</a><a href="#view-schedule">Schedule</a><a href="#view-prices">Prices</a><a href="#view-howto">Method</a>
+  </nav>
+  <section class="details-sec" id="view-report">
+    <header class="page-head"><span class="dt-step">The week</span><h1>The bottom line</h1></header>
+    <div class="page-card" id="report-host"></div>
+  </section>
+  <section class="details-sec" id="view-savings">
+    <header class="page-head"><span class="dt-step">Why</span><h1>Where the savings come from</h1>
+      <p>Same jobs, same week. The difference is when each one runs.</p></header>
+    <div id="bridge-host"></div>
+  </section>
   <section class="details-sec" id="view-schedule">
     <header class="page-head">
-      <h1>This week’s schedule</h1>
+      <span class="dt-step">When</span><h1>This week’s schedule</h1>
       <p>Every maintenance job, when our plan runs it, and what it costs compared with doing it as soon as possible.</p>
     </header>
     <div class="page-card" id="schedule-host"></div>
@@ -230,11 +242,9 @@
     </section>
     </div>
   </section>
-
-  <!-- View 3: prices -->
   <section class="details-sec" id="view-prices">
     <header class="page-head">
-      <h1>What downtime costs</h1>
+      <span class="dt-step">The market</span><h1>What downtime costs</h1>
       <p>Each hour a GPU is down costs its share of the H100 market price that day, scaled by how busy the hall is at that hour.</p>
     </header>
     <div class="page-card">
@@ -243,8 +253,11 @@
       <div class="caption credit" id="price-credit">Real weekly prices through Nov 2, daily forecast is our model. Data: <a href="https://getdeploying.com/gpus" target="_blank" rel="noopener">GetDeploying</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, forecast added.</div>
     </section>
     </div>
+  </section>
+  <section class="details-sec" id="view-howto">
+    <header class="page-head"><span class="dt-step">Method</span><h1>How it’s priced</h1></header>
     <section class="page-card howto" id="howto">
-      <h2>How it’s priced</h2>
+      
     <div class="howto-body">
       <div class="formula">
         <div><b>cost(hour)</b> = GPUs offline × utilization(hour) × price(day)<span class="cloud-only"> × (1 + SLA)</span></div>
@@ -254,11 +267,6 @@
       <p>The planner tries every allowed start for every task, never overlaps two jobs in one cooling zone, and keeps the cheapest schedule. The baseline starts each job at the first business-hours slot.</p>
     </div>
     </section>
-  </section>
-
-  <!-- View 4: report -->
-  <section class="details-sec" id="view-report">
-    <div class="page-card" id="report-host"></div>
   </section>
   </main>
 

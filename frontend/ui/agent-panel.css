@@ -12,14 +12,14 @@
 :is(.panel, body) .ask.ap-live::placeholder { color: var(--ink-4, #A7B2B7); }
 :is(.panel, body) .ask.ap-live:hover:not(:disabled) { border-color: var(--ink-3, #6B7880); }
 :is(.panel, body) .ask.ap-live:focus {
-  outline: none; border-color: var(--ours, #0B7A84);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ours, #0B7A84) 18%, transparent);
+  outline: none; border-color: var(--ours, #1F7A4D);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ours, #1F7A4D) 18%, transparent);
 }
 :is(.panel, body) .ask.ap-live:disabled { cursor: progress; background: var(--sheet-2, #EDF1F1); color: var(--ink-3, #6B7880); }
 .pill.ap-pill-live {
-  color: var(--ours-ink, #085E66);
-  border-color: color-mix(in srgb, var(--ours, #0B7A84) 40%, transparent);
-  background: color-mix(in srgb, var(--ours, #0B7A84) 8%, transparent);
+  color: var(--ours-ink, #155C38);
+  border-color: color-mix(in srgb, var(--ours, #1F7A4D) 40%, transparent);
+  background: color-mix(in srgb, var(--ours, #1F7A4D) 8%, transparent);
 }
 
 .ap-box { margin-top: 8px; font-family: var(--f-ui, system-ui, sans-serif); }
@@ -34,10 +34,10 @@
   transition: border-color .15s, color .15s, background .15s;
 }
 :is(.panel, body) .ap-chip:hover:not(:disabled) {
-  border-color: var(--ours, #0B7A84); color: var(--ours-ink, #085E66);
-  background: color-mix(in srgb, var(--ours, #0B7A84) 6%, transparent);
+  border-color: var(--ours, #1F7A4D); color: var(--ours-ink, #155C38);
+  background: color-mix(in srgb, var(--ours, #1F7A4D) 6%, transparent);
 }
-.ap-chip:focus-visible, .ap-btn:focus-visible { outline: 2px solid var(--ours, #0B7A84); outline-offset: 2px; }
+.ap-chip:focus-visible, .ap-btn:focus-visible { outline: 2px solid var(--ours, #1F7A4D); outline-offset: 2px; }
 :is(.panel, body) .ap-chip:disabled { opacity: .45; cursor: progress; }
 .ap-busy .ap-chips { opacity: .7; }
 
@@ -56,7 +56,7 @@
   content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%;
   background: var(--amber, #F2BE3A); animation: ap-pulse 1s ease-in-out infinite;
 }
-:is(.panel, body) .ap-err { color: var(--asap-ink, #B4441A); }
+:is(.panel, body) .ap-err { color: var(--asap-ink, #9C1C2D); }
 @keyframes ap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 
 /* ---------- result ---------- */
@@ -85,9 +85,9 @@
   grid-row: 1; grid-column: 3; justify-self: end; padding: 0;
   font: 600 11px/1.35 var(--f-ui, system-ui, sans-serif); border: 0; border-radius: 0; white-space: nowrap;
 }
-.ap-llm .ap-tag { color: var(--ours, #0B7A84); }
+.ap-llm .ap-tag { color: var(--ours, #1F7A4D); }
 .ap-code .ap-tag { color: var(--ink-3, #6B7880); }
-.ap-fallback .ap-tag { color: var(--asap, #EA5B1F); }
+.ap-fallback .ap-tag { color: var(--asap, #C8283C); }
 .ap-code .ap-step-txt, .ap-fallback .ap-step-txt { color: var(--ink-2, #3E4C55); }
 .ap-detail { grid-column: 2 / 4; font-size: 12px; line-height: 1.35; color: var(--ink-2, #3E4C55); }
 :is(.panel, body) .ap-fn {
@@ -108,7 +108,7 @@
 /* ---------- task card ---------- */
 .ap-task {
   margin-top: 8px; padding: 8px 10px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: baseline;
-  border: 1px solid var(--hair, rgba(23,35,43,.14)); border-left: 3px solid var(--zc, var(--ours, #0B7A84));
+  border: 1px solid var(--hair, rgba(23,35,43,.14)); border-left: 3px solid var(--zc, var(--ours, #1F7A4D));
   border-radius: var(--r, 4px); background: var(--sheet, #F6F8F8); font-size: 12.5px; line-height: 1.35;
 }
 .ap-task[data-zone="Z1"] { --zc: var(--z1, #3F6FB0); }
@@ -119,8 +119,8 @@
 .ap-task-main { min-width: 0; color: var(--ink, #17232B); }
 .ap-task-main b { font-weight: 600; }
 .ap-task-zone { color: var(--ink-3, #6B7880); }
-:is(.panel, body) .ap-task-when { grid-column: 2; font: 600 12px/1.35 var(--f-ui, system-ui, sans-serif); color: var(--ours-ink, #085E66); }
-:is(.panel, body) .ap-task-when.ap-unsched { color: var(--asap-ink, #B4441A); }
+:is(.panel, body) .ap-task-when { grid-column: 2; font: 600 12px/1.35 var(--f-ui, system-ui, sans-serif); color: var(--ours-ink, #155C38); }
+:is(.panel, body) .ap-task-when.ap-unsched { color: var(--asap-ink, #9C1C2D); }
 
 .ap-expl {
   margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink, #17232B);
@@ -148,20 +148,20 @@
 .ap-alarm { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .ap-alarm-btn {
   flex: none; height: 34px; padding: 0 14px; cursor: pointer; border-radius: var(--r, 4px);
-  font: 600 13px/1 var(--f-ui, system-ui, sans-serif); color: var(--asap-ink, #B4441A);
-  background: transparent; border: 1px solid var(--asap, #EA5B1F);
+  font: 600 13px/1 var(--f-ui, system-ui, sans-serif); color: var(--asap-ink, #9C1C2D);
+  background: transparent; border: 1px solid var(--asap, #C8283C);
   transition: background .15s;
 }
-.ap-alarm-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--asap, #EA5B1F) 10%, transparent); }
-.ap-alarm-btn:focus-visible { outline: 2px solid var(--asap, #EA5B1F); outline-offset: 2px; }
+.ap-alarm-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--asap, #C8283C) 10%, transparent); }
+.ap-alarm-btn:focus-visible { outline: 2px solid var(--asap, #C8283C); outline-offset: 2px; }
 .ap-alarm-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ap-alarm-note { min-width: 0; font-size: 12px; line-height: 1.35; color: var(--ink-3, #6B7880); }
 .ap-incident {
   margin-top: 4px; padding: 8px 10px; border: 1px solid var(--hair, rgba(23,35,43,.14));
-  border-top: 3px solid var(--asap, #EA5B1F); border-radius: var(--r, 4px);
-  background: color-mix(in srgb, var(--asap, #EA5B1F) 6%, var(--sheet, #F6F8F8)); font-size: 12.5px; line-height: 1.4;
+  border-top: 3px solid var(--asap, #C8283C); border-radius: var(--r, 4px);
+  background: color-mix(in srgb, var(--asap, #C8283C) 6%, var(--sheet, #F6F8F8)); font-size: 12.5px; line-height: 1.4;
 }
-.ap-incident-h { font-weight: 600; color: var(--asap-ink, #B4441A); }
+.ap-incident-h { font-weight: 600; color: var(--asap-ink, #9C1C2D); }
 .ap-incident-t { margin-top: 2px; font-weight: 600; color: var(--ink, #17232B); }
 .ap-incident-d { color: var(--ink-2, #3E4C55); }
 .ap-incident-src { margin-top: 2px; font-size: 11.5px; color: var(--ink-3, #6B7880); }

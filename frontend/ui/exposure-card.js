@@ -8,7 +8,7 @@ const PARTS = [
   ['market', 'Market', 'var(--ink-2, #3E4C55)'],
   ['contract', 'SLA', 'var(--amber, #F2BE3A)'],
   ['failure', 'Failure', 'var(--ink-4, #A7B2B7)'],
-  ['overheat', 'Overheat', 'var(--asap, #EA5B1F)'],
+  ['overheat', 'Overheat', 'var(--asap, #C8283C)'],
 ];
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const money = (v) => (Number.isFinite(Number(v)) ? usd.format(Math.round(Number(v))) : '—');

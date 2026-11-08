@@ -1272,6 +1272,10 @@ function refreshView() {
     try { priceInsights?.refresh?.(); } catch (e) { console.warn('[price-insights] refresh failed:', e); }
   }
   if (curView === 'details') {
+    import('./ui/savings-bridge.js').then((m) => m.renderBridge($('bridge-host'), { plans: S.d.plans, mode: S.mode }))
+      .catch((e) => console.warn('[savings-bridge]', e));
+  }
+  if (curView === 'details') {
     (reportMod ||= import('./ui/report.js')).then((m) => {
       const host = $('report-host');
       const args = { plans: S.d.plans, backlog: S.raw.backlog, prices: S.raw.prices, mode: S.mode };
@@ -1298,6 +1302,10 @@ function wireViews() {
     setView(tabs[j].dataset.view, { focus: true });
   });
   window.addEventListener('hashchange', () => setView(viewFromHash() || 'home'));
+  document.querySelector('.dt-nav')?.addEventListener('click', (e) => {
+    const a = e.target.closest('a'); if (!a) return;
+    e.preventDefault(); $(a.getAttribute('href').slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   let start = viewFromHash();
   if (!start) {
     start = BOOT.day != null ? 'details' : 'home';
