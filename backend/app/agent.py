@@ -515,7 +515,8 @@ def run_request(text: str, llm: LLM | None) -> AgentResponse:
 
     _finish_pipeline(state, prefix)
     return AgentResponse(task=state.as_requested(state.tasks[-1]), plan=state.plans["optimized"],
-                         explanation=explain(state, llm), tool_calls=state.tool_calls)
+                         explanation=explain(state, llm), tool_calls=state.tool_calls,
+                         asap_plan=state.plans["asap"])
 
 
 @router.post("/request", response_model=AgentResponse)

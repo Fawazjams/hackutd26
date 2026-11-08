@@ -54,3 +54,4 @@ class AgentResponse(BaseModel):
     plan: Plan | None
     explanation: str
     tool_calls: list[str] = []   # shown in the demo to prove multi-step tool use
+    asap_plan: Plan | None = None  # the ASAP baseline behind the explanation's savings (same tasks as `plan`)

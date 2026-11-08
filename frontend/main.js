@@ -172,16 +172,21 @@ function applyRaw(raw) {
 }
 
 // Ask Nemotron panel (ui/agent-panel.js) sends the optimized plan incl. its new task.
-// The event has no ASAP plan, so ask /plan for ASAP over the same tasks; keep the old
-// ASAP plan if that fails (offline), so the scoreboard still plays.
+// Use the agent's own ASAP plan (same tasks, same numbers as its explanation). Older backends
+// don't send one, so fall back to asking /plan; keep the old ASAP plan if that fails (offline).
+// Backlog = only the jobs the agent planned, so a task left over from an earlier request
+// can't sneak into ASAP and inflate the savings.
 async function onAgentPlan(e) {
-  const { task, plan } = e.detail || {};
+  const { task, plan, asapPlan } = e.detail || {};
   if (!task || !plan || !S.raw) return;
   const mode = plan.mode || S.mode;
-  const backlog = [...S.raw.backlog.filter(t => t.id !== task.id), task];
-  let asap = S.raw.plans.asap;
-  try { asap = await planWithTasks(mode, 'asap', backlog); }
-  catch (err) { console.warn('[agent] ASAP re-plan failed, keeping previous ASAP plan:', err); }
+  const planned = new Set([...plan.items, ...(plan.unscheduled || [])].map(i => i.task_id));
+  const backlog = [...S.raw.backlog.filter(t => t.id !== task.id && planned.has(t.id)), task];
+  let asap = asapPlan || S.raw.plans.asap;
+  if (!asapPlan) {
+    try { asap = await planWithTasks(mode, 'asap', backlog); }
+    catch (err) { console.warn('[agent] ASAP re-plan failed, keeping previous ASAP plan:', err); }
+  }
   S.selected = task.id;
   applyRaw({ ...S.raw, backlog, plans: { optimized: plan, asap } });
 }

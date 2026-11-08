@@ -138,7 +138,7 @@ function mount(opts) {
       status.textContent = `Done in ${secs} s.`;
       render(r);
       if (r?.task && r?.plan) {
-        window.dispatchEvent(new CustomEvent('agent:plan', { detail: { task: r.task, plan: r.plan, explanation: r.explanation } }));
+        window.dispatchEvent(new CustomEvent('agent:plan', { detail: { task: r.task, plan: r.plan, asapPlan: r.asap_plan, explanation: r.explanation } }));
       }
     } catch (e) {
       status.className = 'ap-status ap-err';

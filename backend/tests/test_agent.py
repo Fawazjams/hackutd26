@@ -108,6 +108,16 @@ def test_explanation_numbers_match_tool_numbers():
     assert f"${asap.total_cost - opt.total_cost:,.2f}" in r.explanation
 
 
+def test_response_carries_the_asap_plan_behind_the_savings():
+    """The UI scoreboard uses r.asap_plan, so it must be the same baseline the explanation quotes,
+    over exactly the same tasks as r.plan."""
+    r = run_request(UPS_TEXT, None)
+    assert r.asap_plan is not None and r.asap_plan.strategy == "asap"
+    assert f"${r.asap_plan.total_cost:,.2f}" in r.explanation
+    ids = lambda p: {i.task_id for i in p.items} | {u.task_id for u in p.unscheduled}
+    assert ids(r.asap_plan) == ids(r.plan)
+
+
 def test_llm_crash_falls_back_to_rehearsed_task():
     class Boom:
         def chat(self, messages, tools):
